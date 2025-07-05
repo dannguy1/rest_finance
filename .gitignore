@@ -1,0 +1,310 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# pdm
+.pdm.toml
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# ===== PROJECT SPECIFIC =====
+
+# Data directories (contains user data)
+data/
+backups/
+logs/
+
+# Configuration files with sensitive data
+config/*.json
+config/*.yaml
+config/*.yml
+config/*.env
+
+# Log files
+*.log
+backend.log
+frontend.log
+*.log.*
+
+# Test files (temporary)
+test_*.py
+*_test.py
+simple_test.py
+manual_test.py
+
+# Documentation files (temporary)
+*.md
+!README.md
+
+# Benchmark results
+.benchmarks/
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+*.sublime-project
+*.sublime-workspace
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# API keys and secrets
+.env.local
+.env.production
+.env.staging
+secrets.json
+api_keys.json
+
+# User uploaded files
+uploads/
+user_data/
+processed_files/
+
+# Cache directories
+.cache/
+cache/
+
+# Node modules (if any frontend dependencies)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Compiled files
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.dll
+*.dylib
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Archive files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Certificate files
+*.pem
+*.key
+*.crt
+*.csr
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+docker-compose.yaml
+
+# Kubernetes
+*.yaml
+*.yml
+!requirements.yml
+!pyproject.toml
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Ansible
+*.retry
+
+# Vagrant
+.vagrant/
+
+# Virtual machines
+*.vmdk
+*.vdi
+*.vmx
+
+# ===== SENSITIVE DATA PROTECTION =====
+
+# Financial data and user information
+financial_data/
+user_data/
+personal_data/
+bank_data/
+transaction_data/
+
+# Sample data files
+sample_data/
+sample_files/
+example_data/
+
+# Source metadata (contains processed user data)
+source_metadata/
+
+# Configuration with sensitive information
+sensitive_config/
+private_config/
+
+# API credentials
+credentials/
+secrets/
+keys/
+
+# Database dumps
+*.sql
+*.dump
+
+# Backup files with sensitive data
+backup_*.json
+backup_*.csv
+backup_*.xlsx
+
+# Temporary processing files
+temp/
+tmp/
+processing/ 

@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+
+{% block title %}{{ source_name }} - Garlic and Chives{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex align-items-center">
+                <div class="me-3">
+                    <i class="bi bi-{{ source_icon }} fs-1 text-primary"></i>
+                </div>
+                <div>
+                    <h1 class="h3 mb-1">{{ source_name }}</h1>
+                    <p class="text-muted mb-0">{{ source_description }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <ul class="nav nav-tabs" id="sourceTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload-pane" type="button" role="tab" aria-controls="upload-pane" aria-selected="true">
+                        <i class="bi bi-cloud-upload me-2"></i>
+                        Upload Files
+                    </button>
+                </li>
+
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="preview-tab" data-bs-toggle="tab" data-bs-target="#preview-pane" type="button" role="tab" aria-controls="preview-pane" aria-selected="false">
+                        <i class="bi bi-eye me-2"></i>
+                        Preview
+                    </button>
+                </li>
+
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="files-tab" data-bs-toggle="tab" data-bs-target="#files-pane" type="button" role="tab" aria-controls="files-pane" aria-selected="false">
+                        <i class="bi bi-folder me-2"></i>
+                        Processed Files
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="sourceTabsContent">
+        <!-- Upload Files Tab -->
+        <div class="tab-pane fade show active" id="upload-pane" role="tabpanel" aria-labelledby="upload-tab" tabindex="0">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                <i class="bi bi-cloud-upload me-2"></i>
+                                Upload {{ source_name }} Files
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- Drag & Drop Upload Zone -->
+                            <div class="upload-zone" id="upload-zone">
+                                <div class="upload-zone-content">
+                                    <i class="bi bi-cloud-upload fs-1 text-muted mb-3"></i>
+                                    <h5 class="text-muted mb-2">Drag & Drop CSV Files Here</h5>
+                                    <p class="text-muted mb-3">or click to browse files</p>
+                                    <button class="btn btn-primary" id="browse-files-btn">
+                                        <i class="bi bi-folder2-open me-2"></i>
+                                        Browse Files
+                                    </button>
+                                </div>
+                                <input type="file" id="file-input" multiple accept=".csv" style="display: none;">
+                            </div>
+
+                            <!-- Upload Progress -->
+                            <div class="upload-progress mt-4" id="upload-progress" style="display: none;">
+                                <h6 class="mb-3">Upload Progress</h6>
+                                <div class="progress mb-3">
+                                    <div class="progress-bar" role="progressbar" style="width: 0%" id="progress-bar"></div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted" id="progress-text">0% Complete</small>
+                                    <small class="text-muted" id="file-count">0 files</small>
+                                </div>
+                            </div>
+
+                            <!-- Uploaded Files List -->
+                            <div class="uploaded-files mt-4" id="uploaded-files" style="display: none;">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0">Uploaded Files</h6>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button class="btn btn-info btn-sm" id="check-files-btn" title="Check file format and structure">
+                                            <i class="bi bi-search me-2"></i>
+                                            Check Files
+                                        </button>
+                                        <button class="btn btn-warning btn-sm" id="process-all-btn" style="display: none;" title="Process all uploaded files">
+                                            <i class="bi bi-gear me-2"></i>
+                                            Process All Files
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm" id="uploaded-files-table">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>File Name</th>
+                                                <th>Size</th>
+                                                <th>Upload Date</th>
+                                                <th>Status</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="uploaded-files-body">
+                                            <!-- Files will be added here dynamically -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <!-- File Validation Results -->
+                            <div class="validation-results mt-4" id="validation-results" style="display: none;">
+                                <div class="card border-info">
+                                    <div class="card-header bg-info text-white">
+                                        <h6 class="mb-0">
+                                            <i class="bi bi-clipboard-check me-2"></i>
+                                            File Validation Results
+                                        </h6>
+                                    </div>
+                                    <div class="card-body" id="validation-results-content">
+                                        <!-- Validation results will be populated here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview Tab -->
+        <div class="tab-pane fade" id="preview-pane" role="tabpanel" aria-labelledby="preview-tab" tabindex="0">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">
+                                <i class="bi bi-eye me-2"></i>
+                                File Preview
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- File Selection -->
+                            <div class="row mb-4">
+                                <div class="col-md-6">
+                                    <label for="preview-file-select" class="form-label">Select File to Preview</label>
+                                    <select class="form-select" id="preview-file-select">
+                                        <option value="">Choose a file...</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 d-flex align-items-end">
+                                    <button class="btn btn-primary" id="load-preview-btn" disabled>
+                                        <i class="bi bi-eye me-2"></i>
+                                        Load Preview
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- File Info -->
+                            <div class="row mb-3" id="preview-file-info" style="display: none;">
+                                <div class="col-12">
+                                    <div class="alert alert-info">
+                                        <div class="row">
+                                            <div class="col-md-3">
+                                                <strong>File:</strong> <span id="preview-filename"></span>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <strong>Total Rows:</strong> <span id="preview-total-rows"></span>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <strong>Size:</strong> <span id="preview-file-size"></span>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <strong>Type:</strong> <span id="preview-file-type"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Full File Preview -->
+                            <div class="table-responsive" id="preview-table-container" style="display: none;">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="mb-0">File Content</h6>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button type="button" class="btn btn-outline-secondary" id="preview-download-btn" title="Download this file">
+                                            <i class="bi bi-download"></i>
+                                            Download
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="border rounded" style="max-height: 600px; overflow: auto;">
+                                    <table class="table table-sm table-striped mb-0" id="preview-full-table">
+                                        <thead class="table-light sticky-top">
+                                            <tr id="preview-table-headers">
+                                                <!-- Headers will be populated dynamically -->
+                                            </tr>
+                                        </thead>
+                                        <tbody id="preview-table-body">
+                                            <!-- Data will be populated dynamically -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Loading State -->
+                            <div class="text-center py-5" id="preview-loading" style="display: none;">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2 text-muted">Loading file preview...</p>
+                            </div>
+
+                            <!-- Empty State -->
+                            <div class="text-center py-5" id="preview-empty-state">
+                                <i class="bi bi-file-earmark-text fs-1 text-muted mb-3"></i>
+                                <h5 class="text-muted">No file selected</h5>
+                                <p class="text-muted">Select a file from the dropdown above to preview its contents.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Processed Files Tab -->
+        <div class="tab-pane fade" id="files-pane" role="tabpanel" aria-labelledby="files-tab" tabindex="0">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="bi bi-folder me-2"></i>
+                                Processed Files
+                            </h5>
+                            <button class="btn btn-sm btn-outline-light" id="refresh-files-btn">
+                                <i class="bi bi-arrow-clockwise me-1"></i>
+                                Refresh
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <!-- Year Filter -->
+                            <div class="row mb-4">
+                                <div class="col-md-4">
+                                    <label for="year-filter" class="form-label">Filter by Year</label>
+                                    <select class="form-select" id="year-filter">
+                                        <option value="">All Years</option>
+                                        <!-- Years will be populated dynamically -->
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="month-filter" class="form-label">Filter by Month</label>
+                                    <select class="form-select" id="month-filter">
+                                        <option value="">All Months</option>
+                                        <option value="1">January</option>
+                                        <option value="2">February</option>
+                                        <option value="3">March</option>
+                                        <option value="4">April</option>
+                                        <option value="5">May</option>
+                                        <option value="6">June</option>
+                                        <option value="7">July</option>
+                                        <option value="8">August</option>
+                                        <option value="9">September</option>
+                                        <option value="10">October</option>
+                                        <option value="11">November</option>
+                                        <option value="12">December</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Files Table -->
+                            <div class="table-responsive">
+                                <table class="table table-hover" id="files-table">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>File Name</th>
+                                            <th>Year</th>
+                                            <th>Month</th>
+                                            <th>Size</th>
+                                            <th>Last Modified</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="files-table-body">
+                                        <!-- Files will be populated dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Empty State -->
+                            <div class="text-center py-5" id="empty-state" style="display: none;">
+                                <i class="bi bi-folder-x fs-1 text-muted mb-3"></i>
+                                <h5 class="text-muted">No processed files found</h5>
+                                <p class="text-muted">Upload and process some files to see them here.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- File Preview Modal -->
+<div class="modal fade" id="filePreviewModal" tabindex="-1" aria-labelledby="filePreviewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="filePreviewModalLabel">File Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-sm" id="preview-table">
+                        <thead>
+                            <tr>
+                                <!-- Headers will be populated dynamically -->
+                            </tr>
+                        </thead>
+                        <tbody id="preview-table-body">
+                            <!-- Data will be populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="download-file-btn">
+                    <i class="bi bi-download me-2"></i>
+                    Download
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Source-specific configuration
+    window.sourceConfig = {
+        source: '{{ source }}',
+        sourceName: '{{ source_name }}',
+        sourceIcon: '{{ source_icon }}'
+    };
+</script>
+<script src="/static/js/source.js?v={{ range(1, 1000) | random }}"></script>
+{% endblock %} 

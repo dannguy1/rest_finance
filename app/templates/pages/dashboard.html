@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Garlic and Chives{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h1 class="mb-4">Dashboard</h1>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon">
+                <i class="bi bi-file-earmark-text"></i>
+            </div>
+            <div class="stat-content">
+                <h3 id="total-files">0</h3>
+                <p>Total Files</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon">
+                <i class="bi bi-gear"></i>
+            </div>
+            <div class="stat-content">
+                <h3 id="processing-jobs">0</h3>
+                <p>Processing Jobs</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon">
+                <i class="bi bi-graph-up"></i>
+            </div>
+            <div class="stat-content">
+                <h3 id="processed-data">0</h3>
+                <p>Processed Records</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-sm-6 mb-3">
+        <div class="stat-card">
+            <div class="stat-icon">
+                <i class="bi bi-download"></i>
+            </div>
+            <div class="stat-content">
+                <h3 id="output-files">0</h3>
+                <p>Output Files</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content Row -->
+<div class="row">
+    <!-- Recent Activity -->
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-activity me-2"></i>
+                    Recent Activity
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="recent-activity">
+                    <div class="activity-item">
+                        <div class="activity-icon">
+                            <i class="bi bi-upload text-success"></i>
+                        </div>
+                        <div class="activity-content">
+                            <p><strong>File uploaded:</strong> bank_statement_2024.csv</p>
+                            <small class="text-muted">2 minutes ago</small>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon">
+                            <i class="bi bi-gear text-primary"></i>
+                        </div>
+                        <div class="activity-content">
+                            <p><strong>Processing completed:</strong> chase_data_2024.csv</p>
+                            <small class="text-muted">15 minutes ago</small>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon">
+                            <i class="bi bi-download text-info"></i>
+                        </div>
+                        <div class="activity-content">
+                            <p><strong>Report generated:</strong> monthly_summary_2024.pdf</p>
+                            <small class="text-muted">1 hour ago</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-lightning me-2"></i>
+                    Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="quick-actions">
+                    <a href="/upload" class="btn btn-primary">
+                        <i class="bi bi-cloud-upload me-2"></i>
+                        Upload Files
+                    </a>
+                    <a href="/process" class="btn btn-outline-primary">
+                        <i class="bi bi-gear me-2"></i>
+                        Process Data
+                    </a>
+                    <a href="/analytics" class="btn btn-outline-primary">
+                        <i class="bi bi-graph-up me-2"></i>
+                        View Analytics
+                    </a>
+                    <a href="/download" class="btn btn-outline-primary">
+                        <i class="bi bi-download me-2"></i>
+                        Download Reports
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Status -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-info-circle me-2"></i>
+                    System Status
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <div class="status-card success p-3">
+                            <h6 class="text-success">File Processing</h6>
+                            <p class="mb-0">All systems operational</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <div class="status-card info p-3">
+                            <h6 class="text-info">Database</h6>
+                            <p class="mb-0">Connected and healthy</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <div class="status-card warning p-3">
+                            <h6 class="text-warning">Storage</h6>
+                            <p class="mb-0">75% capacity used</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6 mb-3">
+                        <div class="status-card p-3">
+                            <h6 class="text-primary">API</h6>
+                            <p class="mb-0">Response time: 45ms</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Load dashboard data when page loads
+    document.addEventListener('DOMContentLoaded', function() {
+        if (window.app) {
+            window.app.loadDashboardData();
+        }
+    });
+</script>
+{% endblock %} 

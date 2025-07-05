@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Garlic and Chives{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Welcome Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center py-5">
+                    <h2>Welcome to Garlic and Chives</h2>
+                    <p>Process and organize your financial data from multiple sources with ease.</p>
+                    <div class="welcome-actions">
+                        <a href="/upload" class="btn btn-primary btn-large">
+                            <i class="fas fa-upload"></i>
+                            Upload Files
+                        </a>
+                        <a href="/process" class="btn btn-secondary btn-large">
+                            <i class="fas fa-cogs"></i>
+                            Process Data
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <section class="stats-section">
+        <h3>Quick Overview</h3>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-file-csv"></i>
+                </div>
+                <div class="stat-content">
+                    <h4>Total Files</h4>
+                    <p class="stat-number" id="total-files">0</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <div class="stat-content">
+                    <h4>Processed Records</h4>
+                    <p class="stat-number" id="total-records">0</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-dollar-sign"></i>
+                </div>
+                <div class="stat-content">
+                    <h4>Total Amount</h4>
+                    <p class="stat-number" id="total-amount">$0.00</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-calendar"></i>
+                </div>
+                <div class="stat-content">
+                    <h4>Active Sources</h4>
+                    <p class="stat-number" id="active-sources">0</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Recent Activity -->
+    <section class="activity-section">
+        <h3>Recent Activity</h3>
+        <div class="activity-list" id="activity-list">
+            <div class="activity-item">
+                <div class="activity-icon">
+                    <i class="fas fa-info-circle"></i>
+                </div>
+                <div class="activity-content">
+                    <p>No recent activity. Upload some files to get started!</p>
+                    <span class="activity-time">Just now</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Actions -->
+    <section class="actions-section">
+        <h3>Quick Actions</h3>
+        <div class="actions-grid">
+            <div class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-upload"></i>
+                </div>
+                <h4>Upload Files</h4>
+                <p>Upload CSV files from your financial sources</p>
+                <a href="/upload" class="btn btn-primary">Upload</a>
+            </div>
+            <div class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-cogs"></i>
+                </div>
+                <h4>Process Data</h4>
+                <p>Process uploaded files and generate reports</p>
+                <a href="/process" class="btn btn-primary">Process</a>
+            </div>
+            <div class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-download"></i>
+                </div>
+                <h4>Download Results</h4>
+                <p>Download processed monthly reports</p>
+                <a href="/download" class="btn btn-primary">Download</a>
+            </div>
+            <div class="action-card">
+                <div class="action-icon">
+                    <i class="fas fa-chart-bar"></i>
+                </div>
+                <h4>View Analytics</h4>
+                <p>View charts and analytics of your data</p>
+                <a href="/analytics" class="btn btn-primary">View</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- System Status -->
+    <section class="status-section">
+        <h3>System Status</h3>
+        <div class="status-grid">
+            <div class="status-card">
+                <div class="status-header">
+                    <h4>Application Health</h4>
+                    <span class="status-indicator" id="app-health">Checking...</span>
+                </div>
+                <div class="status-details">
+                    <p>API Status: <span id="api-status">Checking...</span></p>
+                    <p>Database: <span id="db-status">Checking...</span></p>
+                    <p>File System: <span id="fs-status">Checking...</span></p>
+                </div>
+            </div>
+            <div class="status-card">
+                <div class="status-header">
+                    <h4>Performance</h4>
+                </div>
+                <div class="status-details">
+                    <p>CPU Usage: <span id="cpu-usage">--</span></p>
+                    <p>Memory Usage: <span id="memory-usage">--</span></p>
+                    <p>Disk Usage: <span id="disk-usage">--</span></p>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Dashboard-specific JavaScript
+document.addEventListener('DOMContentLoaded', function() {
+    loadDashboardData();
+    setInterval(loadDashboardData, 30000); // Refresh every 30 seconds
+});
+
+async function loadDashboardData() {
+    try {
+        // Load system health
+        await loadSystemHealth();
+        
+        // Load statistics
+        await loadStatistics();
+        
+        // Load recent activity
+        await loadRecentActivity();
+        
+    } catch (error) {
+        console.error('Error loading dashboard data:', error);
+        showNotification('Failed to load dashboard data', 'error');
+    }
+}
+
+async function loadSystemHealth() {
+    try {
+        const response = await fetch('/api/health/detailed');
+        const data = await response.json();
+        
+        // Update health indicators
+        document.getElementById('app-health').textContent = data.status;
+        document.getElementById('app-health').className = `status-indicator ${data.status}`;
+        
+        document.getElementById('api-status').textContent = 'Healthy';
+        document.getElementById('db-status').textContent = data.database.status;
+        document.getElementById('fs-status').textContent = 'Healthy';
+        
+        // Update performance metrics
+        if (data.system) {
+            document.getElementById('cpu-usage').textContent = `${data.system.cpu_percent}%`;
+            document.getElementById('memory-usage').textContent = `${data.system.memory_percent}%`;
+            document.getElementById('disk-usage').textContent = `${data.system.disk_percent}%`;
+        }
+        
+    } catch (error) {
+        console.error('Error loading system health:', error);
+        document.getElementById('app-health').textContent = 'Error';
+        document.getElementById('app-health').className = 'status-indicator error';
+    }
+}
+
+async function loadStatistics() {
+    try {
+        // This would typically aggregate data from all sources
+        // For now, we'll show placeholder data
+        document.getElementById('total-files').textContent = '0';
+        document.getElementById('total-records').textContent = '0';
+        document.getElementById('total-amount').textContent = '$0.00';
+        document.getElementById('active-sources').textContent = '0';
+        
+    } catch (error) {
+        console.error('Error loading statistics:', error);
+    }
+}
+
+async function loadRecentActivity() {
+    try {
+        // This would typically load from a database
+        // For now, we'll show a placeholder message
+        const activityList = document.getElementById('activity-list');
+        activityList.innerHTML = `
+            <div class="activity-item">
+                <div class="activity-icon">
+                    <i class="fas fa-info-circle"></i>
+                </div>
+                <div class="activity-content">
+                    <p>No recent activity. Upload some files to get started!</p>
+                    <span class="activity-time">Just now</span>
+                </div>
+            </div>
+        `;
+        
+    } catch (error) {
+        console.error('Error loading recent activity:', error);
+    }
+}
+</script>
+{% endblock %} 

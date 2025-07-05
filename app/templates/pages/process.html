@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Data Processing - Garlic and Chives{% endblock %}
+
+{% block content %}
+<div class="process-page">
+    <div class="page-header">
+        <h1>Data Processing</h1>
+        <p>Process uploaded files and generate organized reports</p>
+    </div>
+    
+    <div class="tabs">
+        <button class="tab active" data-tab="process-jobs">Processing Jobs</button>
+        <button class="tab" data-tab="job-history">Job History</button>
+        <button class="tab" data-tab="processing-settings">Settings</button>
+    </div>
+    
+    <div class="tab-content active" id="process-jobs">
+        <div class="card">
+            <div class="card-header">
+                <h3>Active Processing Jobs</h3>
+                <button class="btn btn-primary" onclick="app.startNewJob()">
+                    <i class="fas fa-plus"></i> New Job
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="active-jobs">
+                    <p class="text-muted">No active processing jobs</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tab-content" id="job-history">
+        <div class="card">
+            <div class="card-header">
+                <h3>Job History</h3>
+            </div>
+            <div class="card-body">
+                <div id="job-history-content">
+                    <p class="text-muted">No job history available</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tab-content" id="processing-settings">
+        <div class="card">
+            <div class="card-header">
+                <h3>Processing Settings</h3>
+            </div>
+            <div class="card-body">
+                <form id="processing-settings-form">
+                    <div class="form-group">
+                        <label class="form-label">Default Date Format</label>
+                        <select class="form-control" name="dateFormat">
+                            <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                            <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                            <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Currency Format</label>
+                        <select class="form-control" name="currencyFormat">
+                            <option value="USD">USD ($)</option>
+                            <option value="EUR">EUR (€)</option>
+                            <option value="GBP">GBP (£)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <input type="checkbox" name="groupByDescription" checked>
+                            Group by Description
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

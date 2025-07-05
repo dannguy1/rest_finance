@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}File Upload - Garlic and Chives{% endblock %}
+
+{% block content %}
+<div class="upload-page">
+    <div class="page-header">
+        <h1>File Upload</h1>
+        <p>Upload financial data files for processing</p>
+    </div>
+    
+    <div class="tabs">
+        <button class="tab active" data-tab="upload-files">Upload Files</button>
+        <button class="tab" data-tab="upload-history">Upload History</button>
+        <button class="tab" data-tab="file-validation">File Validation</button>
+    </div>
+    
+    <div class="tab-content active" id="upload-files">
+        <div class="upload-zones">
+            <div class="row">
+                <div class="col-md-6 col-lg-3">
+                    <div class="upload-zone" data-source="BankOfAmerica">
+                        <div class="upload-zone-header">
+                            <i class="fas fa-university"></i>
+                            <h4>Bank of America</h4>
+                        </div>
+                        <div class="upload-zone-content">
+                            <div class="drop-area" id="boa-drop-area">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>Drag & drop CSV files here</p>
+                                <p class="small">or click to browse</p>
+                            </div>
+                            <input type="file" id="boa-file-input" multiple accept=".csv" style="display: none;">
+                        </div>
+                        <div class="upload-zone-footer">
+                            <div class="progress" id="boa-progress" style="display: none;">
+                                <div class="progress-bar" role="progressbar"></div>
+                            </div>
+                            <div class="upload-status" id="boa-status">Ready for upload</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-3">
+                    <div class="upload-zone" data-source="Chase">
+                        <div class="upload-zone-header">
+                            <i class="fas fa-credit-card"></i>
+                            <h4>Chase</h4>
+                        </div>
+                        <div class="upload-zone-content">
+                            <div class="drop-area" id="chase-drop-area">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>Drag & drop CSV files here</p>
+                                <p class="small">or click to browse</p>
+                            </div>
+                            <input type="file" id="chase-file-input" multiple accept=".csv" style="display: none;">
+                        </div>
+                        <div class="upload-zone-footer">
+                            <div class="progress" id="chase-progress" style="display: none;">
+                                <div class="progress-bar" role="progressbar"></div>
+                            </div>
+                            <div class="upload-status" id="chase-status">Ready for upload</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-3">
+                    <div class="upload-zone" data-source="RestaurantDepot">
+                        <div class="upload-zone-header">
+                            <i class="fas fa-store"></i>
+                            <h4>Restaurant Depot</h4>
+                        </div>
+                        <div class="upload-zone-content">
+                            <div class="drop-area" id="restaurantdepot-drop-area">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>Drag & drop CSV files here</p>
+                                <p class="small">or click to browse</p>
+                            </div>
+                            <input type="file" id="restaurantdepot-file-input" multiple accept=".csv" style="display: none;">
+                        </div>
+                        <div class="upload-zone-footer">
+                            <div class="progress" id="restaurantdepot-progress" style="display: none;">
+                                <div class="progress-bar" role="progressbar"></div>
+                            </div>
+                            <div class="upload-status" id="restaurantdepot-status">Ready for upload</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-3">
+                    <div class="upload-zone" data-source="Sysco">
+                        <div class="upload-zone-header">
+                            <i class="fas fa-truck"></i>
+                            <h4>Sysco</h4>
+                        </div>
+                        <div class="upload-zone-content">
+                            <div class="drop-area" id="sysco-drop-area">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>Drag & drop CSV files here</p>
+                                <p class="small">or click to browse</p>
+                            </div>
+                            <input type="file" id="sysco-file-input" multiple accept=".csv" style="display: none;">
+                        </div>
+                        <div class="upload-zone-footer">
+                            <div class="progress" id="sysco-progress" style="display: none;">
+                                <div class="progress-bar" role="progressbar"></div>
+                            </div>
+                            <div class="upload-status" id="sysco-status">Ready for upload</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tab-content" id="upload-history">
+        <div class="card">
+            <div class="card-header">
+                <h3>Upload History</h3>
+            </div>
+            <div class="card-body">
+                <div id="upload-history-content">
+                    <p class="text-muted">No upload history available</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tab-content" id="file-validation">
+        <div class="card">
+            <div class="card-header">
+                <h3>File Validation</h3>
+            </div>
+            <div class="card-body">
+                <div id="file-validation-content">
+                    <p class="text-muted">No files to validate</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

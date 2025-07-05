@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Garlic and Chives{% endblock %}
+
+{% block content %}
+<div class="settings-page">
+    <div class="page-header">
+        <h1>Settings</h1>
+        <p>Configure your application preferences</p>
+    </div>
+    
+    <div class="tabs">
+        <button class="tab active" data-tab="general">General</button>
+        <button class="tab" data-tab="processing">Processing</button>
+        <button class="tab" data-tab="notifications">Notifications</button>
+        <button class="tab" data-tab="system">System</button>
+    </div>
+    
+    <div class="tab-content active" id="general">
+        <div class="card">
+            <div class="card-header">
+                <h3>General Settings</h3>
+            </div>
+            <div class="card-body">
+                <form id="general-settings-form">
+                    <div class="form-group">
+                        <label class="form-label">Theme</label>
+                        <select class="form-control" name="theme">
+                            <option value="light">Light</option>
+                            <option value="dark">Dark</option>
+                            <option value="auto">Auto</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Language</label>
+                        <select class="form-control" name="language">
+                            <option value="en">English</option>
+                            <option value="es">Spanish</option>
+                            <option value="fr">French</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tab-content" id="processing">
+        <div class="card">
+            <div class="card-header">
+                <h3>Processing Settings</h3>
+            </div>
+            <div class="card-body">
+                <form id="processing-settings-form">
+                    <div class="form-group">
+                        <label class="form-label">Max File Size (MB)</label>
+                        <input type="number" class="form-control" name="maxFileSize" value="50" min="1" max="100">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Auto-process on upload</label>
+                        <input type="checkbox" name="autoProcess" checked>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tab-content" id="notifications">
+        <div class="card">
+            <div class="card-header">
+                <h3>Notification Settings</h3>
+            </div>
+            <div class="card-body">
+                <form id="notification-settings-form">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <input type="checkbox" name="emailNotifications" checked>
+                            Email Notifications
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">
+                            <input type="checkbox" name="browserNotifications" checked>
+                            Browser Notifications
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="tab-content" id="system">
+        <div class="card">
+            <div class="card-header">
+                <h3>System Information</h3>
+            </div>
+            <div class="card-body">
+                <div id="system-info">
+                    <p class="text-muted">Loading system information...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
