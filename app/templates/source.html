@@ -31,16 +31,16 @@
                 </li>
 
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="preview-tab" data-bs-toggle="tab" data-bs-target="#preview-pane" type="button" role="tab" aria-controls="preview-pane" aria-selected="false">
-                        <i class="bi bi-eye me-2"></i>
-                        Preview
+                    <button class="nav-link" id="files-tab" data-bs-toggle="tab" data-bs-target="#files-pane" type="button" role="tab" aria-controls="files-pane" aria-selected="false">
+                        <i class="bi bi-folder me-2"></i>
+                        Processed Files
                     </button>
                 </li>
 
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="files-tab" data-bs-toggle="tab" data-bs-target="#files-pane" type="button" role="tab" aria-controls="files-pane" aria-selected="false">
-                        <i class="bi bi-folder me-2"></i>
-                        Processed Files
+                    <button class="nav-link" id="preview-tab" data-bs-toggle="tab" data-bs-target="#preview-pane" type="button" role="tab" aria-controls="preview-pane" aria-selected="false">
+                        <i class="bi bi-eye me-2"></i>
+                        Preview
                     </button>
                 </li>
             </ul>
@@ -133,6 +133,47 @@
                                         <!-- Validation results will be populated here -->
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Processed Files Tab -->
+        <div class="tab-pane fade" id="files-pane" role="tabpanel" aria-labelledby="files-tab" tabindex="0">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="bi bi-folder me-2"></i>
+                                Processed Files
+                            </h5>
+                            <button class="btn btn-sm btn-outline-light" id="refresh-files-btn">
+                                <i class="bi bi-arrow-clockwise me-1"></i>
+                                Refresh
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <!-- Tree View Container -->
+                            <div class="processed-files-tree" id="processed-files-tree">
+                                <!-- Tree structure will be populated dynamically -->
+                            </div>
+
+                            <!-- Empty State -->
+                            <div class="text-center py-5" id="empty-state" style="display: none;">
+                                <i class="bi bi-folder-x fs-1 text-muted mb-3"></i>
+                                <h5 class="text-muted">No processed files found</h5>
+                                <p class="text-muted">Upload and process some files to see them here.</p>
+                            </div>
+
+                            <!-- Loading State -->
+                            <div class="text-center py-5" id="files-loading" style="display: none;">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2 text-muted">Loading processed files...</p>
                             </div>
                         </div>
                     </div>
@@ -235,82 +276,6 @@
                                 <i class="bi bi-file-earmark-text fs-1 text-muted mb-3"></i>
                                 <h5 class="text-muted">No file selected</h5>
                                 <p class="text-muted">Select a file from the dropdown above to preview its contents.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Processed Files Tab -->
-        <div class="tab-pane fade" id="files-pane" role="tabpanel" aria-labelledby="files-tab" tabindex="0">
-            <div class="row">
-                <div class="col-12">
-                    <div class="card border-0 shadow-sm">
-                        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
-                                <i class="bi bi-folder me-2"></i>
-                                Processed Files
-                            </h5>
-                            <button class="btn btn-sm btn-outline-light" id="refresh-files-btn">
-                                <i class="bi bi-arrow-clockwise me-1"></i>
-                                Refresh
-                            </button>
-                        </div>
-                        <div class="card-body">
-                            <!-- Year Filter -->
-                            <div class="row mb-4">
-                                <div class="col-md-4">
-                                    <label for="year-filter" class="form-label">Filter by Year</label>
-                                    <select class="form-select" id="year-filter">
-                                        <option value="">All Years</option>
-                                        <!-- Years will be populated dynamically -->
-                                    </select>
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="month-filter" class="form-label">Filter by Month</label>
-                                    <select class="form-select" id="month-filter">
-                                        <option value="">All Months</option>
-                                        <option value="1">January</option>
-                                        <option value="2">February</option>
-                                        <option value="3">March</option>
-                                        <option value="4">April</option>
-                                        <option value="5">May</option>
-                                        <option value="6">June</option>
-                                        <option value="7">July</option>
-                                        <option value="8">August</option>
-                                        <option value="9">September</option>
-                                        <option value="10">October</option>
-                                        <option value="11">November</option>
-                                        <option value="12">December</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <!-- Files Table -->
-                            <div class="table-responsive">
-                                <table class="table table-hover" id="files-table">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>File Name</th>
-                                            <th>Year</th>
-                                            <th>Month</th>
-                                            <th>Size</th>
-                                            <th>Last Modified</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="files-table-body">
-                                        <!-- Files will be populated dynamically -->
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <!-- Empty State -->
-                            <div class="text-center py-5" id="empty-state" style="display: none;">
-                                <i class="bi bi-folder-x fs-1 text-muted mb-3"></i>
-                                <h5 class="text-muted">No processed files found</h5>
-                                <p class="text-muted">Upload and process some files to see them here.</p>
                             </div>
                         </div>
                     </div>

@@ -10,9 +10,12 @@ class SourceApp {
 
     init() {
         this.setupEventListeners();
-        this.loadUploadedFiles();
-        this.loadProcessedFiles();
+        this.setupFileUpload();
+        this.setupTabEvents();
+        this.setupFileManagement();
+        this.setupFilters();
         this.setupPreviewTab();
+        this.loadProcessedFiles();
     }
 
     setupEventListeners() {
@@ -247,28 +250,45 @@ class SourceApp {
     }
 
     async loadProcessedFiles() {
+        console.log('loadProcessedFiles called');
         try {
+            const loadingState = document.getElementById('files-loading');
+            console.log('Loading state element:', loadingState);
+            if (loadingState) {
+                loadingState.style.display = 'block';
+            }
+
+            console.log('Fetching from:', `/api/files/${this.config.source}`);
             const response = await fetch(`/api/files/${this.config.source}`);
+            console.log('Response status:', response.status);
             if (response.ok) {
                 const data = await response.json();
+                console.log('Received data:', data);
                 this.displayProcessedFiles(data.files);
-                this.populateYearFilter(data.years);
             } else {
-                throw new Error('Failed to load files');
+                throw new Error('Failed to load processed files');
             }
         } catch (error) {
+            console.error('Error in loadProcessedFiles:', error);
             this.showAlert('Failed to load processed files', 'danger');
+        } finally {
+            const loadingState = document.getElementById('files-loading');
+            if (loadingState) {
+                loadingState.style.display = 'none';
+            }
         }
     }
 
     displayProcessedFiles(files) {
-        const tbody = document.getElementById('files-table-body');
+        const treeContainer = document.getElementById('processed-files-tree');
         const emptyState = document.getElementById('empty-state');
         
-        if (!tbody) return;
+        if (!treeContainer) {
+            return;
+        }
 
         if (files.length === 0) {
-            tbody.innerHTML = '';
+            treeContainer.innerHTML = '';
             if (emptyState) {
                 emptyState.style.display = 'block';
             }
@@ -279,76 +299,90 @@ class SourceApp {
             emptyState.style.display = 'none';
         }
 
-        tbody.innerHTML = '';
-        
+        // Group files by year
+        const filesByYear = {};
         files.forEach(file => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>
-                    <i class="bi bi-file-earmark-text me-2"></i>
-                    ${file.name}
-                </td>
-                <td>${file.year}</td>
-                <td>${this.getMonthName(file.month)}</td>
-                <td>${this.formatFileSize(file.size)}</td>
-                <td>${this.formatDate(file.modified)}</td>
-                <td>
-                    <div class="btn-group btn-group-sm" role="group">
-                        <button type="button" class="btn btn-outline-primary" title="Preview" onclick="sourceApp.previewFile('${file.path}')">
+            if (!filesByYear[file.year]) {
+                filesByYear[file.year] = [];
+            }
+            filesByYear[file.year].push(file);
+        });
+
+        // Sort years in descending order
+        const sortedYears = Object.keys(filesByYear).sort((a, b) => b - a);
+
+        treeContainer.innerHTML = '';
+        
+        sortedYears.forEach(year => {
+            const yearFiles = filesByYear[year];
+            
+            // Create year folder
+            const yearFolder = document.createElement('div');
+            yearFolder.className = 'tree-item folder';
+            yearFolder.style.display = 'flex';
+            yearFolder.style.alignItems = 'center';
+            yearFolder.style.flexWrap = 'nowrap';
+            yearFolder.style.width = '100%';
+            yearFolder.innerHTML = `
+                <span class="tree-indent" style="width: 1.5rem; display: inline-block; flex-shrink: 0;"></span>
+                <i class="bi bi-chevron-right tree-toggle" style="cursor: pointer; color: #6c757d; transition: transform 0.2s; flex-shrink: 0;" onclick="sourceApp.toggleFolder(this)"></i>
+                <i class="bi bi-folder-fill tree-icon folder" style="width: 1.2rem; margin-right: 0.5rem; text-align: center; flex-shrink: 0; color: #ffc107;"></i>
+                <span class="tree-name" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 0.5rem; min-width: 0;">${year}</span>
+                <span class="text-muted small">(${yearFiles.length} files)</span>
+            `;
+            treeContainer.appendChild(yearFolder);
+
+            // Create children container
+            const childrenContainer = document.createElement('div');
+            childrenContainer.className = 'tree-children';
+            treeContainer.appendChild(childrenContainer);
+
+            // Sort files by month
+            yearFiles.sort((a, b) => a.month - b.month).forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'tree-item file';
+                fileItem.style.display = 'flex';
+                fileItem.style.alignItems = 'center';
+                fileItem.style.flexWrap = 'nowrap';
+                fileItem.style.width = '100%';
+                fileItem.innerHTML = `
+                    <span class="tree-indent" style="width: 1.5rem; display: inline-block; flex-shrink: 0;"></span>
+                    <span class="tree-indent" style="width: 1.5rem; display: inline-block; flex-shrink: 0;"></span>
+                    <i class="bi bi-file-earmark-text tree-icon file" style="width: 1.2rem; margin-right: 0.5rem; text-align: center; flex-shrink: 0;"></i>
+                    <span class="tree-name" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 0.5rem; min-width: 0;">${file.name}</span>
+                    <span class="text-muted small" style="margin-right: 0.5rem;">${this.formatFileSize(file.size)}</span>
+                    <div class="tree-actions" style="display: flex; gap: 0.25rem; margin-left: auto; flex-shrink: 0; white-space: nowrap;">
+                        <button type="button" class="btn btn-outline-primary btn-sm" title="Preview" onclick="sourceApp.previewFile('${file.path}')">
                             <i class="bi bi-eye"></i>
                         </button>
-                        <button type="button" class="btn btn-outline-success" title="Download" onclick="sourceApp.downloadFile('${file.path}')">
+                        <button type="button" class="btn btn-outline-success btn-sm" title="Download" onclick="sourceApp.downloadFile('${file.path}')">
                             <i class="bi bi-download"></i>
                         </button>
-                        <button type="button" class="btn btn-outline-danger" title="Delete" onclick="sourceApp.deleteProcessedFile(${file.year}, ${parseInt(file.month, 10)})">
+                        <button type="button" class="btn btn-outline-danger btn-sm" title="Delete" onclick="sourceApp.deleteProcessedFile(${file.year}, ${parseInt(file.month, 10)})">
                             <i class="bi bi-trash"></i>
                         </button>
                     </div>
-                </td>
-            `;
-            tbody.appendChild(row);
+                `;
+                childrenContainer.appendChild(fileItem);
+                
+                // Debug: Log the computed styles
+                setTimeout(() => {
+                    const computedStyle = window.getComputedStyle(fileItem);
+                    console.log('File item display:', computedStyle.display);
+                    console.log('File item flex-direction:', computedStyle.flexDirection);
+                    console.log('File item HTML:', fileItem.outerHTML);
+                }, 100);
+            });
         });
     }
 
-    populateYearFilter(years) {
-        const yearFilter = document.getElementById('year-filter');
-        if (yearFilter) {
-            // Keep the "All Years" option
-            yearFilter.innerHTML = '<option value="">All Years</option>';
-            
-            years.forEach(year => {
-                const option = document.createElement('option');
-                option.value = year;
-                option.textContent = year;
-                yearFilter.appendChild(option);
-            });
-        }
-    }
-
-    filterFiles() {
-        const yearFilter = document.getElementById('year-filter');
-        const monthFilter = document.getElementById('month-filter');
+    toggleFolder(toggleElement) {
+        const treeItem = toggleElement.closest('.tree-item');
+        const childrenContainer = treeItem.nextElementSibling;
         
-        const year = yearFilter ? yearFilter.value : '';
-        const month = monthFilter ? monthFilter.value : '';
-        
-        // Reload files with filters
-        this.loadProcessedFilesWithFilters(year, month);
-    }
-
-    async loadProcessedFilesWithFilters(year, month) {
-        try {
-            const params = new URLSearchParams();
-            if (year) params.append('year', year);
-            if (month) params.append('month', month);
-            
-            const response = await fetch(`/api/files/${this.config.source}?${params}`);
-            if (response.ok) {
-                const data = await response.json();
-                this.displayProcessedFiles(data.files);
-            }
-        } catch (error) {
-            this.showAlert('Failed to filter files', 'danger');
+        if (childrenContainer && childrenContainer.classList.contains('tree-children')) {
+            childrenContainer.classList.toggle('collapsed');
+            toggleElement.classList.toggle('expanded');
         }
     }
 
@@ -1439,5 +1473,7 @@ class SourceApp {
 // Initialize the source application
 let sourceApp;
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM Content Loaded - initializing SourceApp');
+    alert('SourceApp is loading!');
     sourceApp = new SourceApp();
 }); 
