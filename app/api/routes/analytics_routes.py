@@ -134,7 +134,7 @@ async def analytics_monthly_summary(
         monthly_data.columns = ['amount', 'count']
         monthly_data = monthly_data.reset_index()
         
-        # Convert to list of dictionaries
+        # Convert to list of dictionaries with proper type conversion
         monthly_summary = []
         for _, row in monthly_data.iterrows():
             monthly_summary.append({
@@ -143,10 +143,10 @@ async def analytics_monthly_summary(
                 'count': int(row['count'])
             })
         
-        # Calculate summary statistics
-        total_transactions = df['Amount'].count()
-        total_amount = df['Amount'].sum()
-        average_per_month = total_amount / len(monthly_summary) if monthly_summary else 0
+        # Calculate summary statistics with proper type conversion
+        total_transactions = int(df['Amount'].count())
+        total_amount = float(df['Amount'].sum())
+        average_per_month = float(total_amount / len(monthly_summary)) if monthly_summary else 0.0
         
         # Find highest and lowest months
         if monthly_summary:
@@ -161,10 +161,10 @@ async def analytics_monthly_summary(
             "file_path": filePath,
             "monthly_data": monthly_summary,
             "total_transactions": total_transactions,
-            "total_amount": float(total_amount),
-            "average_per_month": float(average_per_month),
-            "highest_month": highest_month['month'] if highest_month else None,
-            "lowest_month": lowest_month['month'] if lowest_month else None
+            "total_amount": total_amount,
+            "average_per_month": average_per_month,
+            "highest_month": str(highest_month['month']) if highest_month else None,
+            "lowest_month": str(lowest_month['month']) if lowest_month else None
         }
         
     except HTTPException:
@@ -268,7 +268,7 @@ async def analytics_trends(
         df['month'] = df[date_column].dt.to_period('M')
         monthly_trends = df.groupby('month')['Amount'].sum().reset_index()
         
-        # Convert to list of dictionaries
+        # Convert to list of dictionaries with proper type conversion
         trend_data = []
         for _, row in monthly_trends.iterrows():
             trend_data.append({
@@ -278,17 +278,17 @@ async def analytics_trends(
         
         # Calculate trend direction and growth rate
         if len(trend_data) >= 2:
-            first_amount = trend_data[0]['amount']
-            last_amount = trend_data[-1]['amount']
+            first_amount = float(trend_data[0]['amount'])
+            last_amount = float(trend_data[-1]['amount'])
             
             if first_amount != 0:
-                growth_rate = ((last_amount - first_amount) / abs(first_amount)) * 100
+                growth_rate = float(((last_amount - first_amount) / abs(first_amount)) * 100)
             else:
-                growth_rate = 0
+                growth_rate = 0.0
                 
             trend_direction = "Increasing" if growth_rate > 0 else "Decreasing" if growth_rate < 0 else "Stable"
         else:
-            growth_rate = 0
+            growth_rate = 0.0
             trend_direction = "Insufficient Data"
         
         # Find peak and lowest months
@@ -305,8 +305,8 @@ async def analytics_trends(
             "trend_data": trend_data,
             "trend_direction": trend_direction,
             "growth_rate": round(growth_rate, 2),
-            "peak_month": peak_month['month'] if peak_month else None,
-            "lowest_month": lowest_month['month'] if lowest_month else None
+            "peak_month": str(peak_month['month']) if peak_month else None,
+            "lowest_month": str(lowest_month['month']) if lowest_month else None
         }
         
     except HTTPException:
