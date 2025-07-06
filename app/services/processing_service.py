@@ -6,12 +6,44 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.config import settings
 from app.utils.logging import processing_logger
 from app.utils.file_utils import FileUtils
 from app.utils.csv_utils import CSVUtils
 from app.models.file_models import ProcessingOptions, ProcessingResult
+from dataclasses import dataclass
+from app.config.source_mapping import mapping_manager
+
+
+@dataclass
+class ProcessingOptions:
+    """Options for data processing."""
+    year: Optional[int] = None
+    month: Optional[int] = None
+    include_metadata: bool = True
+    force_reprocess: bool = False
+
+
+@dataclass
+class ProcessingResult:
+    """Result of data processing operation."""
+    success: bool
+    files_processed: int
+    output_files: List[str]
+    processing_time: float
+    error_message: Optional[str] = None
+
+
+def source_id_to_legacy_enum(source_id: str) -> str:
+    """Convert source ID to legacy source enum format."""
+    mapping = {
+        "bankofamerica": "BankOfAmerica",
+        "chase": "Chase", 
+        "restaurantdepot": "RestaurantDepot",
+        "sysco": "Sysco"
+    }
+    return mapping.get(source_id, source_id)
 
 
 class DataProcessor:
@@ -20,7 +52,7 @@ class DataProcessor:
     def __init__(self, data_dir: Optional[str] = None):
         """Initialize data processor."""
         self.data_dir = Path(data_dir) if data_dir else settings.data_path
-        processing_logger.log_system_event("DataProcessor initialized", {"data_dir": str(self.data_dir)})
+        processing_logger.log_system_event("DataProcessor initialized", details={"data_dir": str(self.data_dir)})
     
     async def process_source(self, source: str, options: Optional[ProcessingOptions] = None) -> ProcessingResult:
         """Process all files for a specific source, automatically generating files for all years found in the data."""
@@ -91,11 +123,13 @@ class DataProcessor:
                 success=False,
                 files_processed=0,
                 output_files=[],
+                processing_time=0.0,
                 error_message=str(e)
             )
     
     async def _get_input_files(self, source: str) -> List[Path]:
         """Get all input files for a source."""
+        # Use source ID directly for directory paths (not legacy enum)
         source_dir = self.data_dir / source / "input"
         if not source_dir.exists():
             return []
@@ -103,17 +137,30 @@ class DataProcessor:
         return list(source_dir.glob("*.csv"))
     
     async def _parse_files(self, files: List[Path], source: str) -> List[Dict[str, Any]]:
-        """Parse files based on source type."""
-        if source == "BankOfAmerica":
-            return await self._parse_boa_files(files)
-        elif source == "Chase":
-            return await self._parse_chase_files(files)
-        elif source == "RestaurantDepot":
-            return await self._parse_restaurant_depot_files(files)
-        elif source == "Sysco":
-            return await self._parse_sysco_files(files)
-        else:
-            raise ValueError(f"Unsupported source type: {source}")
+        """Parse files based on source type using configuration."""
+        # Get the source mapping configuration
+        mapping = mapping_manager.get_mapping(source)
+        if not mapping:
+            # Fall back to legacy parsing if no mapping found
+            legacy_source = source_id_to_legacy_enum(source)
+            if legacy_source == "BankOfAmerica":
+                return await self._parse_boa_files(files)
+            elif legacy_source == "Chase":
+                return await self._parse_chase_files(files)
+            elif legacy_source == "RestaurantDepot":
+                return await self._parse_restaurant_depot_files(files)
+            elif legacy_source == "Sysco":
+                return await self._parse_sysco_files(files)
+            else:
+                raise ValueError(f"Unsupported source type: {source} (mapped to {legacy_source})")
+        
+        # Use configuration-based parsing for multiple files
+        all_transactions = []
+        for file_path in files:
+            file_transactions = await self._parse_with_config(file_path, mapping)
+            all_transactions.extend(file_transactions)
+        
+        return all_transactions
     
     async def _parse_boa_files(self, files: List[Path]) -> List[Dict[str, Any]]:
         """Parse Bank of America CSV files."""
@@ -292,7 +339,7 @@ class DataProcessor:
             if int(year_part) != year:
                 continue
             
-            # Create output directory
+            # Create output directory using source ID directly
             output_dir = self.data_dir / source / "output" / str(year)
             FileUtils.ensure_directory(output_dir)
             
@@ -325,6 +372,7 @@ class DataProcessor:
     async def get_processing_summary(self, source: str, year: int) -> Dict[str, Any]:
         """Get processing summary for a source and year."""
         try:
+            # Use source ID directly for directory paths
             output_dir = self.data_dir / source / "output" / str(year)
             if not output_dir.exists():
                 return {"total_files": 0, "total_records": 0, "total_amount": 0.0}
@@ -364,13 +412,14 @@ class DataProcessor:
                 "system", source, "processing", 0.0, f"Starting processing for {source} file {filename}"
             )
             
-            # 1. Get the specific file
+            # 1. Get the specific file using source ID directly
             file_path = self.data_dir / source / "input" / filename
             if not file_path.exists():
                 return ProcessingResult(
                     success=False,
                     files_processed=0,
                     output_files=[],
+                    processing_time=0.0,
                     error_message=f"File {filename} not found for {source}"
                 )
             
@@ -381,6 +430,7 @@ class DataProcessor:
                     success=False,
                     files_processed=0,
                     output_files=[],
+                    processing_time=0.0,
                     error_message=f"No valid data found in {filename}"
                 )
             
@@ -421,21 +471,86 @@ class DataProcessor:
                 success=False,
                 files_processed=0,
                 output_files=[],
+                processing_time=0.0,
                 error_message=str(e)
             )
 
     async def _parse_single_file(self, file_path: Path, source: str) -> List[Dict[str, Any]]:
-        """Parse a single file based on source type."""
-        if source == "BankOfAmerica":
-            return await self._parse_boa_single_file(file_path)
-        elif source == "Chase":
-            return await self._parse_chase_single_file(file_path)
-        elif source == "RestaurantDepot":
-            return await self._parse_restaurant_depot_single_file(file_path)
-        elif source == "Sysco":
-            return await self._parse_sysco_single_file(file_path)
-        else:
-            raise ValueError(f"Unsupported source type: {source}")
+        """Parse a single file based on source type using configuration."""
+        # Get the source mapping configuration
+        mapping = mapping_manager.get_mapping(source)
+        processing_logger.log_system_event(
+            f"Parsing file {file_path.name} for source {source}, mapping found: {mapping is not None}"
+        )
+        
+        if not mapping:
+            # Fall back to legacy parsing if no mapping found
+            legacy_source = source_id_to_legacy_enum(source)
+            processing_logger.log_system_event(
+                f"Using legacy parser for {source} (mapped to {legacy_source})"
+            )
+            if legacy_source == "BankOfAmerica":
+                return await self._parse_boa_single_file(file_path)
+            elif legacy_source == "Chase":
+                return await self._parse_chase_single_file(file_path)
+            elif legacy_source == "RestaurantDepot":
+                return await self._parse_restaurant_depot_single_file(file_path)
+            elif legacy_source == "Sysco":
+                return await self._parse_sysco_single_file(file_path)
+            else:
+                raise ValueError(f"Unsupported source type: {source} (mapped to {legacy_source})")
+        
+        # Use configuration-based parsing
+        processing_logger.log_system_event(
+            f"Using configuration-based parser for {source}"
+        )
+        return await self._parse_with_config(file_path, mapping)
+
+    async def _parse_with_config(self, file_path: Path, mapping) -> List[Dict[str, Any]]:
+        """Parse a file using source mapping configuration."""
+        transactions = []
+        
+        try:
+            df = pd.read_csv(file_path)
+            
+            # Validate required columns
+            required_columns = mapping.required_columns
+            if not all(col in df.columns for col in required_columns):
+                raise ValueError(f"Missing required columns in {file_path.name}. Expected: {required_columns}, Found: {list(df.columns)}")
+            
+            for _, row in df.iterrows():
+                try:
+                    transaction = {
+                        'source_file': file_path.name
+                    }
+                    
+                    # Map required columns
+                    transaction[mapping.date_mapping.target_field] = str(row[mapping.date_mapping.source_column])
+                    transaction[mapping.description_mapping.target_field] = str(row[mapping.description_mapping.source_column])
+                    transaction[mapping.amount_mapping.target_field] = CSVUtils.clean_amount(row[mapping.amount_mapping.source_column])
+                    
+                    # Map optional columns if they exist in the data
+                    for opt_mapping in mapping.optional_mappings:
+                        if opt_mapping.source_column in df.columns:
+                            value = row[opt_mapping.source_column]
+                            # Handle amount formatting for optional amount fields
+                            if opt_mapping.mapping_type == "amount":
+                                transaction[opt_mapping.target_field] = CSVUtils.clean_amount(value)
+                            else:
+                                transaction[opt_mapping.target_field] = str(value)
+                    
+                    transactions.append(transaction)
+                except Exception as e:
+                    processing_logger.log_system_event(
+                        f"Error parsing row in {file_path.name}: {str(e)}", level="warning"
+                    )
+                    continue
+                    
+        except Exception as e:
+            processing_logger.log_file_operation("parse", file_path.name, mapping.source_id, False, str(e))
+            raise
+        
+        return transactions
 
     async def _parse_boa_single_file(self, file_path: Path) -> List[Dict[str, Any]]:
         """Parse a single Bank of America CSV file."""
@@ -471,36 +586,38 @@ class DataProcessor:
         return transactions
 
     async def _parse_chase_single_file(self, file_path: Path) -> List[Dict[str, Any]]:
-        """Parse a single Chase CSV file."""
+        """Parse a single Chase CSV file with malformed data structure."""
         transactions = []
         
         try:
             df = pd.read_csv(file_path)
             
-            # Chase files use 'Posting Date', 'Description', 'Amount'
-            # Check for the actual column names in Chase files
-            date_column = None
-            if 'Posting Date' in df.columns:
-                date_column = 'Posting Date'
-            elif 'Date' in df.columns:
-                date_column = 'Date'
-            else:
-                raise ValueError(f"Missing date column in {file_path.name}")
+            # Chase files have malformed data where the actual transaction data
+            # is in the "Description" column instead of "Posting Date"
+            # The "Posting Date" column contains dates, but "Description" contains
+            # the complex transaction data that should be parsed for dates
             
-            description_column = 'Description'
-            amount_column = 'Amount'
-            
-            # Validate required columns
-            required_columns = [date_column, description_column, amount_column]
-            if not all(col in df.columns for col in required_columns):
+            if 'Posting Date' not in df.columns or 'Description' not in df.columns or 'Amount' not in df.columns:
                 raise ValueError(f"Missing required columns in {file_path.name}")
             
             for _, row in df.iterrows():
                 try:
+                    # Extract date from the "Posting Date" column (this contains actual dates)
+                    date_str = str(row['Posting Date']).strip()
+                    
+                    # Extract description from the "Description" column (contains complex transaction data)
+                    description_data = str(row['Description']).strip()
+                    
+                    # Try to extract a meaningful description from the complex transaction data
+                    description = self._extract_chase_description(description_data)
+                    
+                    # Extract amount from the "Amount" column
+                    amount = CSVUtils.clean_amount(row['Amount'])
+                    
                     transaction = {
-                        'date': str(row[date_column]),
-                        'description': str(row[description_column]),
-                        'amount': CSVUtils.clean_amount(row[amount_column]),
+                        'date': date_str,
+                        'description': description,
+                        'amount': amount,
                         'source_file': file_path.name
                     }
                     transactions.append(transaction)
@@ -515,6 +632,33 @@ class DataProcessor:
             raise
         
         return transactions
+    
+    def _extract_chase_description(self, description_data: str) -> str:
+        """Extract meaningful description from Chase transaction data."""
+        try:
+            # Look for company name in the transaction data
+            if 'ORIG CO NAME:' in description_data:
+                # Extract company name
+                start = description_data.find('ORIG CO NAME:') + 13
+                end = description_data.find(' ', start)
+                if end > start:
+                    company_name = description_data[start:end].strip()
+                    return company_name
+            
+            # Look for individual name
+            if 'IND NAME:' in description_data:
+                start = description_data.find('IND NAME:') + 9
+                end = description_data.find(' ', start)
+                if end > start:
+                    individual_name = description_data[start:end].strip()
+                    return individual_name
+            
+            # If no structured data found, take first 50 characters
+            return description_data[:50].strip()
+            
+        except Exception:
+            # Fallback to first 50 characters
+            return description_data[:50].strip()
 
     async def _parse_restaurant_depot_single_file(self, file_path: Path) -> List[Dict[str, Any]]:
         """Parse a single Restaurant Depot invoice file."""

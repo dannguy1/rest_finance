@@ -217,7 +217,7 @@ class SourceApp {
                     <td><span class="badge bg-success rounded-pill">Uploaded</span></td>
                     <td>
                         <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-info" title="Analyze file structure" onclick="sourceApp.analyzeFile('${file.name}')">
+                            <button type="button" class="btn btn-outline-info" title="Verify input data" onclick="sourceApp.analyzeFile('${file.name}')">
                                 <i class="bi bi-search"></i>
                             </button>
                             <button type="button" class="btn btn-outline-primary" title="Preview CSV content" onclick="sourceApp.previewUploadedFile('${file.name}')">
@@ -354,65 +354,27 @@ class SourceApp {
 
     async previewFile(filePath) {
         console.log('previewFile called with:', filePath);
-        try {
-            const response = await fetch(`/api/files/preview/${this.config.source}?file=${encodeURIComponent(filePath)}`);
-            if (response.ok) {
-                const data = await response.json();
-                this.showFilePreview(data);
-            } else {
-                throw new Error('Failed to load file preview');
-            }
-        } catch (error) {
-            this.showAlert('Failed to load file preview', 'danger');
+        
+        // Switch to Preview tab
+        const previewTab = document.getElementById('preview-tab');
+        if (previewTab) {
+            const tab = new bootstrap.Tab(previewTab);
+            tab.show();
         }
-    }
-
-    showFilePreview(data) {
-        this.currentFile = data.filePath || data.fileName;
         
-        const modal = new bootstrap.Modal(document.getElementById('filePreviewModal'));
-        const title = document.getElementById('filePreviewModalLabel');
-        const thead = document.getElementById('preview-table').querySelector('thead tr');
-        const tbody = document.getElementById('preview-table-body');
-        
-        // Set title based on data structure
-        if (title) {
-            if (data.fileName) {
-                title.textContent = `Preview: ${data.fileName}`;
-            } else {
-                title.textContent = `Preview: ${data.filePath}`;
+        // Set the file in the preview dropdown and load it
+        const previewDropdown = document.getElementById('preview-file-select');
+        if (previewDropdown) {
+            // Find the option that matches this file path
+            for (let option of previewDropdown.options) {
+                if (option.value === filePath) {
+                    previewDropdown.value = filePath;
+                    // Trigger the change event to load the preview
+                    previewDropdown.dispatchEvent(new Event('change'));
+                    break;
+                }
             }
         }
-        
-        // Set up headers
-        if (thead && data.headers) {
-            thead.innerHTML = data.headers.map(header => `<th>${header}</th>`).join('');
-        }
-        
-        // Set up data
-        if (tbody && data.rows) {
-            tbody.innerHTML = data.rows.map(row => 
-                `<tr>${row.map(cell => `<td>${cell || ''}</td>`).join('')}</tr>`
-            ).join('');
-        }
-        
-        // Add file info if available
-        const modalBody = document.querySelector('#filePreviewModal .modal-body');
-        if (modalBody && data.totalRows) {
-            const infoDiv = document.createElement('div');
-            infoDiv.className = 'mb-3 p-2 bg-light rounded';
-            infoDiv.innerHTML = `
-                <small class="text-muted">
-                    <strong>File:</strong> ${data.fileName}<br>
-                    <strong>Total Rows:</strong> ${data.totalRows.toLocaleString()}<br>
-                    <strong>Preview:</strong> Showing first ${data.previewRows} rows<br>
-                    <strong>Size:</strong> ${this.formatFileSize(data.fileSize || 0)}
-                </small>
-            `;
-            modalBody.insertBefore(infoDiv, modalBody.firstChild);
-        }
-        
-        modal.show();
     }
 
     async downloadFile(filePath) {
@@ -637,14 +599,23 @@ class SourceApp {
         const loadBtn = document.getElementById('load-preview-btn');
         
         if (fileSelect && loadBtn) {
-            // Enable/disable load button based on selection
+            // Auto-load preview when file is selected
             fileSelect.addEventListener('change', () => {
+                if (fileSelect.value) {
+                    this.loadFullPreview(fileSelect.value);
+                } else {
+                    // Clear preview when no file is selected
+                    this.clearPreview();
+                }
+                // Keep button state for backward compatibility
                 loadBtn.disabled = !fileSelect.value;
             });
             
-            // Load preview when button is clicked
+            // Load preview when button is clicked (for manual trigger)
             loadBtn.addEventListener('click', () => {
-                this.loadFullPreview(fileSelect.value);
+                if (fileSelect.value) {
+                    this.loadFullPreview(fileSelect.value);
+                }
             });
             
             // Load preview when Enter is pressed
@@ -824,6 +795,29 @@ class SourceApp {
         }
     }
 
+    clearPreview() {
+        // Hide file info
+        const fileInfo = document.getElementById('preview-file-info');
+        if (fileInfo) {
+            fileInfo.style.display = 'none';
+        }
+        
+        // Hide table container
+        const container = document.getElementById('preview-table-container');
+        if (container) {
+            container.style.display = 'none';
+        }
+        
+        // Show empty state
+        const emptyState = document.getElementById('preview-empty-state');
+        if (emptyState) {
+            emptyState.style.display = 'block';
+        }
+        
+        // Clear current preview file
+        this.currentPreviewFile = null;
+    }
+
     async downloadCurrentPreviewFile() {
         if (!this.currentPreviewFile) {
             this.showAlert('No file selected for download', 'warning');
@@ -883,11 +877,54 @@ class SourceApp {
         }
     }
 
+    async applyFixes(filename) {
+        try {
+            this.showAlert('Applying automatic fixes...', 'info');
+            
+            const response = await fetch(`/api/files/fix/${this.config.source}/${encodeURIComponent(filename)}`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                this.showAlert('Automatic fixes applied successfully!', 'success');
+                
+                // Reload the file list to show updated status
+                this.loadUploadedFiles();
+                
+                // Close the validation modal
+                this.closeValidationModal();
+            } else {
+                throw new Error('Failed to apply fixes');
+            }
+        } catch (error) {
+            this.showAlert('Failed to apply fixes: ' + error.message, 'danger');
+        }
+    }
+
+    closeValidationModal() {
+        // Close any open modals
+        const modals = document.querySelectorAll('.modal');
+        modals.forEach(modal => {
+            const modalInstance = bootstrap.Modal.getInstance(modal);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+        });
+    }
+
     displayValidationResults(result) {
         const container = document.getElementById('validation-results');
         const content = document.getElementById('validation-results-content');
         
         if (!container || !content) return;
+        
+        // Debug: Log the validation results to see what's available
+        console.log('Validation results:', result);
+        if (result.results && result.results.length > 0) {
+            console.log('First file validation:', result.results[0].validation);
+            console.log('Issues detected:', result.results[0].validation.issues_detected);
+        }
         
         container.style.display = 'block';
         
@@ -961,6 +998,62 @@ class SourceApp {
                     `;
                 }
                 
+                // Simple fix detection and user permission
+                if (validation.issues_detected && Array.isArray(validation.issues_detected) && validation.issues_detected.length > 0) {
+                    const fixableIssues = validation.issues_detected.filter(issue => issue.fixable);
+                    const unfixableIssues = validation.issues_detected.filter(issue => !issue.fixable);
+                    
+                    if (fixableIssues.length > 0) {
+                        html += `
+                            <div class="mt-3">
+                                <div class="alert alert-success border-0">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="bi bi-check-circle me-2"></i>
+                                        <strong>Automatic Fix Available</strong>
+                                    </div>
+                                    <p class="mb-2">The following issues can be fixed automatically:</p>
+                                    <ul class="mb-3">
+                                        ${fixableIssues.map(issue => `
+                                            <li>${issue.message || issue}
+                                                ${issue.suggestion ? `<br><small class="text-muted">💡 ${issue.suggestion}</small>` : ''}
+                                            </li>
+                                        `).join('')}
+                                    </ul>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-success btn-sm" onclick="sourceApp.applyFixes('${fileResult.filename}')">
+                                            <i class="bi bi-wrench me-1"></i>
+                                            Yes, Apply Fixes
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="sourceApp.closeValidationModal()">
+                                            No, Keep As-Is
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    if (unfixableIssues.length > 0) {
+                        html += `
+                            <div class="mt-3">
+                                <div class="alert alert-warning border-0">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <i class="bi bi-exclamation-triangle me-2"></i>
+                                        <strong>Manual Fix Required</strong>
+                                    </div>
+                                    <ul class="mb-0">
+                                        ${unfixableIssues.map(issue => `
+                                            <li>${issue.message || issue}
+                                                ${issue.suggestion ? `<br><small class="text-muted">💡 ${issue.suggestion}</small>` : ''}
+                                            </li>
+                                        `).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+                
                 html += `
                         </div>
                     </div>
@@ -976,6 +1069,10 @@ class SourceApp {
         }
         
         content.innerHTML = html;
+        
+        // Show the modal
+        const modal = new bootstrap.Modal(document.getElementById('fileAnalysisModal'));
+        modal.show();
         
         // Scroll to validation results
         container.scrollIntoView({ behavior: 'smooth' });
@@ -1001,6 +1098,17 @@ class SourceApp {
     displayFileAnalysis(result) {
         const analysis = result.analysis;
         
+        // Debug: Log the validation result to see what's available
+        console.log('Validation result:', analysis.validation);
+        console.log('Issues detected:', analysis.validation.issues_detected);
+        console.log('Errors:', analysis.validation.errors);
+        console.log('Warnings:', analysis.validation.warnings);
+        console.log('Fixable issues:', analysis.validation.issues_detected ? analysis.validation.issues_detected.filter(issue => issue.fixable) : 'No issues detected');
+        console.log('Unfixable issues:', analysis.validation.issues_detected ? analysis.validation.issues_detected.filter(issue => !issue.fixable) : 'No issues detected');
+        
+        // Convert file size from bytes to MB
+        const fileSizeMB = (analysis.file_size_bytes / (1024 * 1024)).toFixed(2);
+        
         let html = `
             <div class="modal fade" id="fileAnalysisModal" tabindex="-1" aria-modal="true" role="dialog" style="z-index: 1060;">
                 <div class="modal-dialog modal-xl">
@@ -1008,7 +1116,7 @@ class SourceApp {
                         <div class="modal-header bg-primary text-white">
                             <h5 class="modal-title">
                                 <i class="bi bi-file-earmark-text me-2"></i>
-                                File Analysis: ${result.filename}
+                                File Validation: ${result.filename}
                             </h5>
                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
@@ -1020,16 +1128,7 @@ class SourceApp {
                                         <div class="card-body text-center">
                                             <i class="bi bi-file-earmark-text fs-1 text-primary mb-2"></i>
                                             <h6 class="card-title">File Size</h6>
-                                            <p class="card-text fw-bold">${analysis.file_size_mb.toFixed(2)} MB</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-3">
-                                    <div class="card border-0 bg-light">
-                                        <div class="card-body text-center">
-                                            <i class="bi bi-table fs-1 text-success mb-2"></i>
-                                            <h6 class="card-title">Total Rows</h6>
-                                            <p class="card-text fw-bold">${analysis.total_rows || 0}</p>
+                                            <p class="card-text fw-bold">${fileSizeMB} MB</p>
                                         </div>
                                     </div>
                                 </div>
@@ -1051,13 +1150,182 @@ class SourceApp {
                                         </div>
                                     </div>
                                 </div>
+                                <div class="col-md-3">
+                                    <div class="card border-0 bg-light">
+                                        <div class="card-body text-center">
+                                            <i class="bi bi-check-circle fs-1 ${analysis.validation.is_valid ? 'text-success' : 'text-danger'} mb-2"></i>
+                                            <h6 class="card-title">Validation</h6>
+                                            <p class="card-text fw-bold">${analysis.validation.is_valid ? 'Valid' : 'Invalid'}</p>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             
-                            <!-- Columns Found -->
+                            <!-- Validation Results -->
                             <div class="mb-4">
                                 <h6 class="text-muted mb-3">
                                     <i class="bi bi-list-check me-2"></i>
-                                    Columns Found
+                                    Column Validation
+                                </h6>
+                                
+                                <!-- Required Columns -->
+                                <div class="mb-3">
+                                    <h6 class="text-success mb-2">
+                                        <i class="bi bi-check-circle me-2"></i>
+                                        Required Columns (${analysis.validation.present_columns.length}/${analysis.validation.required_columns.length})
+                                    </h6>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        ${analysis.validation.required_columns.map(col => {
+                                            const isPresent = analysis.validation.present_columns.includes(col);
+                                            return `<span class="badge ${isPresent ? 'bg-success' : 'bg-danger'} rounded-pill">${col}</span>`;
+                                        }).join('')}
+                                    </div>
+                                </div>
+                                
+                                <!-- Missing Columns Warning -->
+                                ${analysis.validation.missing_columns.length > 0 ? `
+                                    <div class="alert alert-danger border-0 shadow-sm">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                            <h6 class="mb-0">Missing Required Columns (${analysis.validation.missing_columns.length})</h6>
+                                        </div>
+                                        <ul class="mb-0 ps-3">
+                                            ${analysis.validation.missing_columns.map(col => `<li class="mb-1">${col}</li>`).join('')}
+                                        </ul>
+                                    </div>
+                                ` : `
+                                    <div class="alert alert-success border-0 shadow-sm">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-check-circle-fill me-2"></i>
+                                            <span class="mb-0">All required columns are present!</span>
+                                        </div>
+                                    </div>
+                                `}
+                                
+                                <!-- Enhanced Validation Information -->
+                                ${analysis.validation.fixes_applied && Array.isArray(analysis.validation.fixes_applied) && analysis.validation.fixes_applied.length > 0 ? `
+                                    <div class="alert alert-success border-0 shadow-sm mt-3">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="bi bi-check-circle-fill me-2"></i>
+                                            <h6 class="mb-0">Automatic Fixes Applied</h6>
+                                        </div>
+                                        <ul class="mb-0 ps-3">
+                                            ${analysis.validation.fixes_applied.map(fix => `<li class="mb-1">${fix}</li>`).join('')}
+                                        </ul>
+                                    </div>
+                                ` : ''}
+                                
+                                ${analysis.validation.issues_detected && Array.isArray(analysis.validation.issues_detected) && analysis.validation.issues_detected.length > 0 ? `
+                                    <div class="alert alert-warning border-0 shadow-sm mt-3">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                            <h6 class="mb-0">Issues Detected</h6>
+                                        </div>
+                                        <ul class="mb-0 ps-3">
+                                            ${analysis.validation.issues_detected.map(issue => `
+                                                <li class="mb-1">
+                                                    ${issue.message || issue}
+                                                    ${issue.fixable ? ' <span class="badge bg-success">Fixable</span>' : ' <span class="badge bg-danger">Manual Fix Required</span>'}
+                                                </li>
+                                            `).join('')}
+                                        </ul>
+                                    </div>
+                                    
+                                    <!-- Fix Permission Prompt -->
+                                    ${(() => {
+                                        const fixableIssues = analysis.validation.issues_detected.filter(issue => issue.fixable);
+                                        const unfixableIssues = analysis.validation.issues_detected.filter(issue => !issue.fixable);
+                                        
+                                        let promptHtml = '';
+                                        
+                                        if (fixableIssues.length > 0) {
+                                            promptHtml += `
+                                                <div class="alert alert-success border-0 shadow-sm mt-3">
+                                                    <div class="d-flex align-items-center mb-2">
+                                                        <i class="bi bi-check-circle me-2"></i>
+                                                        <strong>Automatic Fix Available</strong>
+                                                    </div>
+                                                    <p class="mb-2">The following issues can be fixed automatically:</p>
+                                                    <ul class="mb-3">
+                                                        ${fixableIssues.map(issue => `
+                                                            <li>${issue.message || issue}
+                                                                ${issue.suggestion ? `<br><small class="text-muted">💡 ${issue.suggestion}</small>` : ''}
+                                                            </li>
+                                                        `).join('')}
+                                                    </ul>
+                                                    <div class="d-flex gap-2">
+                                                        <button type="button" class="btn btn-success btn-sm" onclick="sourceApp.applyFixes('${result.filename}')">
+                                                            <i class="bi bi-wrench me-1"></i>
+                                                            Yes, Apply Fixes
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="sourceApp.closeValidationModal()">
+                                                            No, Keep As-Is
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            `;
+                                        }
+                                        
+                                        if (unfixableIssues.length > 0) {
+                                            promptHtml += `
+                                                <div class="alert alert-warning border-0 shadow-sm mt-3">
+                                                    <div class="d-flex align-items-center mb-2">
+                                                        <i class="bi bi-exclamation-triangle me-2"></i>
+                                                        <strong>Manual Fix Required</strong>
+                                                    </div>
+                                                    <ul class="mb-0">
+                                                        ${unfixableIssues.map(issue => `
+                                                            <li>${issue.message || issue}
+                                                                ${issue.suggestion ? `<br><small class="text-muted">💡 ${issue.suggestion}</small>` : ''}
+                                                            </li>
+                                                        `).join('')}
+                                                    </ul>
+                                                </div>
+                                            `;
+                                        }
+                                        
+                                        return promptHtml;
+                                    })()}
+                                ` : ''}
+                                
+                                ${analysis.validation.fix_suggestions && Array.isArray(analysis.validation.fix_suggestions) && analysis.validation.fix_suggestions.length > 0 ? `
+                                    <div class="alert alert-info border-0 shadow-sm mt-3">
+                                        <div class="d-flex align-items-center mb-2">
+                                            <i class="bi bi-lightbulb-fill me-2"></i>
+                                            <h6 class="mb-0">Fix Suggestions</h6>
+                                        </div>
+                                        <ul class="mb-0 ps-3">
+                                            ${analysis.validation.fix_suggestions.map(suggestion => `<li class="mb-1">${suggestion}</li>`).join('')}
+                                        </ul>
+                                    </div>
+                                ` : ''}
+                                
+                                ${analysis.validation.user_action_required ? `
+                                    <div class="alert alert-warning border-0 shadow-sm mt-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                            <strong>User Action Required</strong>
+                                        </div>
+                                        <p class="mb-0 mt-2">This file has issues that require manual intervention before processing can proceed.</p>
+                                    </div>
+                                ` : ''}
+                                
+                                ${analysis.validation.can_proceed === false ? `
+                                    <div class="alert alert-danger border-0 shadow-sm mt-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-x-circle-fill me-2"></i>
+                                            <strong>Processing Blocked</strong>
+                                        </div>
+                                        <p class="mb-0 mt-2">This file cannot be processed until the issues are resolved.</p>
+                                    </div>
+                                ` : ''}
+                            </div>
+                            
+                            <!-- All Columns Found -->
+                            <div class="mb-4">
+                                <h6 class="text-muted mb-3">
+                                    <i class="bi bi-list-ul me-2"></i>
+                                    All Columns Found
                                 </h6>
                                 <div class="d-flex flex-wrap gap-2">
                                     ${analysis.columns.map(col => `<span class="badge bg-primary rounded-pill">${col}</span>`).join('')}
@@ -1065,51 +1333,12 @@ class SourceApp {
                             </div>
         `;
         
-        if (analysis.issues && analysis.issues.length > 0) {
-            html += `
-                <div class="alert alert-danger border-0 shadow-sm">
-                    <div class="d-flex align-items-center mb-2">
-                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                        <h6 class="mb-0">Issues Found (${analysis.issues.length})</h6>
-                    </div>
-                    <ul class="mb-0 ps-3">
-                        ${analysis.issues.map(issue => `<li class="mb-1">${issue}</li>`).join('')}
-                    </ul>
-                </div>
-            `;
-        }
-        
-        if (analysis.recommendations && analysis.recommendations.length > 0) {
-            html += `
-                <div class="alert alert-info border-0 shadow-sm">
-                    <div class="d-flex align-items-center mb-2">
-                        <i class="bi bi-lightbulb-fill me-2"></i>
-                        <h6 class="mb-0">Recommendations</h6>
-                    </div>
-                    <ul class="mb-0 ps-3">
-                        ${analysis.recommendations.map(rec => `<li class="mb-1">${rec}</li>`).join('')}
-                    </ul>
-                </div>
-            `;
-        }
-        
-        if (analysis.info) {
-            html += `
-                <div class="alert alert-success border-0 shadow-sm">
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-info-circle-fill me-2"></i>
-                        <span class="mb-0">${analysis.info}</span>
-                    </div>
-                </div>
-            `;
-        }
-        
         if (analysis.sample_data && analysis.sample_data.length > 0) {
             html += `
                 <div class="mb-4">
                     <h6 class="text-muted mb-3">
                         <i class="bi bi-table me-2"></i>
-                        Sample Data (First 3 Rows)
+                        Sample Data (First 5 Rows)
                     </h6>
                     <div class="card border-0 shadow-sm">
                         <div class="card-body p-0">
@@ -1198,29 +1427,7 @@ class SourceApp {
             if (uploadZone) {
                 uploadZone.style.pointerEvents = '';
             }
-        }, 100);
-        
-        // Add event listeners for closing
-        modalEl.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                modal.hide();
-            }
-        });
-        
-        modalEl.addEventListener('click', (e) => {
-            if (e.target === modalEl) {
-                modal.hide();
-            }
-        });
-        
-        // Ensure modal is removed when closed
-        modalEl.addEventListener('hidden.bs.modal', () => {
-            modalEl.remove();
-            // Re-enable drag & drop
-            if (uploadZone) {
-                uploadZone.style.pointerEvents = '';
-            }
-        });
+        }, 500);
     }
 }
 

@@ -8,6 +8,10 @@ import aiofiles
 from app.config import settings
 from app.utils.logging import processing_logger
 from app.utils.file_utils import FileUtils
+import asyncio
+import pandas as pd
+import numpy as np
+from datetime import datetime
 
 
 class FileService:
@@ -345,13 +349,27 @@ class FileService:
             # Get first 50 rows for preview
             preview_df = df.head(50)
             
+            # Convert DataFrame to JSON-safe format
+            rows = []
+            for _, row in preview_df.iterrows():
+                row_data = []
+                for value in row:
+                    # Handle infinite and NaN values
+                    if pd.isna(value):
+                        row_data.append(None)
+                    elif isinstance(value, (int, float)) and (pd.isna(value) or np.isinf(value)):
+                        row_data.append(None)
+                    else:
+                        row_data.append(str(value) if not isinstance(value, (int, float, str, bool)) else value)
+                rows.append(row_data)
+            
             return {
                 "fileName": filename,
                 "filePath": str(file_path),
                 "totalRows": len(df),
                 "previewRows": len(preview_df),
                 "headers": df.columns.tolist(),
-                "rows": preview_df.values.tolist(),
+                "rows": rows,
                 "fileSize": file_path.stat().st_size,
                 "source": source
             }
@@ -374,12 +392,26 @@ class FileService:
             import pandas as pd
             df = pd.read_csv(file_path)
             
+            # Convert DataFrame to JSON-safe format
+            rows = []
+            for _, row in df.iterrows():
+                row_data = []
+                for value in row:
+                    # Handle infinite and NaN values
+                    if pd.isna(value):
+                        row_data.append(None)
+                    elif isinstance(value, (int, float)) and (pd.isna(value) or np.isinf(value)):
+                        row_data.append(None)
+                    else:
+                        row_data.append(str(value) if not isinstance(value, (int, float, str, bool)) else value)
+                rows.append(row_data)
+            
             return {
                 "fileName": filename,
                 "filePath": str(file_path),
                 "totalRows": len(df),
                 "headers": df.columns.tolist(),
-                "rows": df.values.tolist(),
+                "rows": rows,
                 "fileSize": file_path.stat().st_size,
                 "source": source
             }
@@ -401,12 +433,26 @@ class FileService:
             import pandas as pd
             df = pd.read_csv(full_path)
             
+            # Convert DataFrame to JSON-safe format
+            rows = []
+            for _, row in df.iterrows():
+                row_data = []
+                for value in row:
+                    # Handle infinite and NaN values
+                    if pd.isna(value):
+                        row_data.append(None)
+                    elif isinstance(value, (int, float)) and (pd.isna(value) or np.isinf(value)):
+                        row_data.append(None)
+                    else:
+                        row_data.append(str(value) if not isinstance(value, (int, float, str, bool)) else value)
+                rows.append(row_data)
+            
             return {
                 "fileName": full_path.name,
                 "filePath": file_path,
                 "totalRows": len(df),
                 "headers": df.columns.tolist(),
-                "rows": df.values.tolist(),
+                "rows": rows,
                 "fileSize": full_path.stat().st_size,
                 "source": source
             }

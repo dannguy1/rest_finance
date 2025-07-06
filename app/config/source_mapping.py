@@ -9,6 +9,8 @@ from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 from enum import Enum
 
+from app.config.settings import settings
+
 
 class MappingType(str, Enum):
     """Types of column mappings."""
@@ -251,7 +253,8 @@ class SourceMappingManager:
     """Manager for source mapping configurations."""
     
     def __init__(self):
-        self.config_dir = Path("config")
+        # Use settings to get the config directory path
+        self.config_dir = settings.config_path
         self.mappings = self._load_mappings()
     
     def _load_mappings(self) -> Dict[str, SourceMappingConfig]:
@@ -259,6 +262,7 @@ class SourceMappingManager:
         mappings = DEFAULT_SOURCE_MAPPINGS.copy()
         
         if not self.config_dir.exists():
+            print(f"Warning: Config directory {self.config_dir} does not exist")
             return mappings
         
         for config_file in self.config_dir.glob("*.json"):
@@ -268,6 +272,7 @@ class SourceMappingManager:
                     data = json.load(f)
                     mapping = SourceMappingConfig(**data)
                     mappings[source_id.lower()] = mapping
+                    print(f"Loaded mapping for {source_id} from {config_file}")
             except Exception as e:
                 print(f"Warning: Failed to load mapping from {config_file}: {e}")
         

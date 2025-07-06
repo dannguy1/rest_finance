@@ -4,8 +4,12 @@ Sample Data API endpoints for managing processed file metadata.
 from typing import Dict, List, Optional, Any
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
+from pathlib import Path
+import tempfile
+import os
 
 from app.services.sample_data_service import sample_data_service
+from app.services.validation_service import ValidationService
 from app.utils.logging import processing_logger
 
 router = APIRouter(tags=["sample-data"])
@@ -62,7 +66,6 @@ async def get_source_full_data(source_id: str) -> Dict[str, Any]:
             "columns": processed_data.columns,
             "sample_data": processed_data.sample_data,
             "detected_mappings": processed_data.detected_mappings,
-            "additional_columns": processed_data.additional_columns,
             "file_format": processed_data.file_format,
             "encoding": processed_data.encoding,
             "metadata": processed_data.metadata
@@ -113,6 +116,55 @@ async def validate_uploaded_file(
             level="error"
         )
         raise HTTPException(status_code=500, detail="Failed to validate file")
+
+
+@router.post("/sources/{source_id}/validate-file")
+async def validate_file_against_metadata(
+    source_id: str,
+    file: UploadFile = File(...)
+) -> Dict[str, Any]:
+    """Validate uploaded file against saved metadata using enhanced validation service."""
+    try:
+        # Validate file type
+        if not file.filename.lower().endswith('.csv'):
+            raise HTTPException(status_code=400, detail="Only CSV files are supported")
+        
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as temp_file:
+            # Write uploaded file content to temporary file
+            content = await file.read()
+            temp_file.write(content)
+            temp_file_path = Path(temp_file.name)
+        
+        try:
+            # Use enhanced validation service
+            validation_service = ValidationService()
+            validation_result = validation_service.validate_file_against_metadata(
+                temp_file_path, source_id
+            )
+            
+            # Add file information to result
+            validation_result['file_info'] = {
+                'filename': file.filename,
+                'size_bytes': len(content),
+                'content_type': file.content_type
+            }
+            
+            return validation_result
+            
+        finally:
+            # Clean up temporary file
+            if temp_file_path.exists():
+                os.unlink(temp_file_path)
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        processing_logger.log_system_event(
+            f"Error validating file against metadata for {source_id}: {str(e)}",
+            level="error"
+        )
+        raise HTTPException(status_code=500, detail="Failed to validate file against metadata")
 
 
 @router.post("/sources/{source_id}/update-config")

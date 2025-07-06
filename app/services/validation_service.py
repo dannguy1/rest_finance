@@ -4,11 +4,14 @@ Validation service for data validation operations.
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 import pandas as pd
+import numpy as np
 from app.config import settings
 from app.utils.logging import processing_logger
 from app.utils.file_utils import FileUtils
 from app.utils.csv_utils import CSVUtils
+from app.services.sample_data_service import SampleDataService
 from datetime import datetime
+from app.config.source_mapping import mapping_manager
 
 
 class ValidationService:
@@ -16,19 +19,186 @@ class ValidationService:
     
     def __init__(self):
         """Initialize validation service."""
+        self.sample_data_service = SampleDataService()
         processing_logger.log_system_event("ValidationService initialized")
     
     def validate_csv_file(self, file_path: Path, source: str) -> Dict[str, Any]:
-        """Validate CSV file for a specific source."""
+        """Validate CSV file for a specific source with enhanced issue detection and fixes."""
         validation_result = {
             'valid': True,
             'errors': [],
             'warnings': [],
-            'record_count': 0
+            'fixes_applied': [],
+            'issues_detected': [],
+            'record_count': 0,
+            'can_proceed': True,
+            'user_action_required': False,
+            'fix_suggestions': []
         }
         
         try:
             # Basic file validation
+            if not file_path.exists():
+                validation_result['errors'].append("File does not exist")
+                validation_result['valid'] = False
+                validation_result['can_proceed'] = False
+                return validation_result
+            
+            if not FileUtils.is_valid_file_type(file_path.name):
+                validation_result['errors'].append("Invalid file type")
+                validation_result['valid'] = False
+                validation_result['can_proceed'] = False
+                return validation_result
+            
+            if not FileUtils.is_valid_file_size(file_path):
+                validation_result['errors'].append(f"File too large (max {settings.max_file_size_mb}MB)")
+                validation_result['valid'] = False
+                validation_result['can_proceed'] = False
+                return validation_result
+            
+            # Check for and fix CSV formatting issues
+            original_file_path = file_path
+            fixed_file_path = self._fix_csv_formatting(file_path)
+            if fixed_file_path != original_file_path:
+                validation_result['fixes_applied'].append("CSV formatting issues (embedded linefeeds) detected and fixed")
+                validation_result['warnings'].append("CSV formatting issues were automatically fixed")
+                file_path = fixed_file_path
+            
+            # Detect source-specific issues
+            source_issues = []
+            try:
+                processing_logger.log_system_event(
+                    f"Starting source-specific issue detection for source: {source}", level="info"
+                )
+                source_issues = self._detect_source_specific_issues(file_path, source)
+                processing_logger.log_system_event(
+                    f"Detected {len(source_issues)} source-specific issues for {source}", level="info"
+                )
+                validation_result['issues_detected'].extend(source_issues)
+            except Exception as e:
+                # If source-specific detection fails, add a generic issue
+                generic_issue = {
+                    'type': 'parsing_error',
+                    'message': f'Error detecting source-specific issues: {str(e)}',
+                    'fixable': False,
+                    'suggestion': 'Check if the file format is correct for this source'
+                }
+                validation_result['issues_detected'].append(generic_issue)
+                source_issues.append(generic_issue)
+            
+            # Check if issues are fixable
+            fixable_issues = [issue for issue in source_issues if issue.get('fixable', False)]
+            unfixable_issues = [issue for issue in source_issues if not issue.get('fixable', False)]
+            
+            if unfixable_issues:
+                validation_result['user_action_required'] = True
+                validation_result['can_proceed'] = False
+                for issue in unfixable_issues:
+                    validation_result['errors'].append(issue['message'])
+                    validation_result['fix_suggestions'].append(issue.get('suggestion', ''))
+            
+            # Apply automatic fixes if possible
+            if fixable_issues:
+                for issue in fixable_issues:
+                    if issue.get('auto_fix'):
+                        fix_result = self._apply_source_specific_fix(file_path, source, issue)
+                        if fix_result['success']:
+                            validation_result['fixes_applied'].append(fix_result['message'])
+                        else:
+                            validation_result['warnings'].append(f"Could not automatically fix: {issue['message']}")
+            
+            # CSV structure validation
+            is_valid, structure_errors = CSVUtils.validate_csv_structure(file_path, source)
+            if not is_valid:
+                validation_result['errors'].extend(structure_errors)
+                validation_result['valid'] = False
+                validation_result['can_proceed'] = False
+            
+            # Read CSV for further validation
+            try:
+                df = pd.read_csv(file_path)
+                validation_result['record_count'] = len(df)
+            except Exception as e:
+                validation_result['errors'].append(f"CSV parsing error: {str(e)}")
+                validation_result['valid'] = False
+                # Check if any fixable issues were detected earlier
+                has_fixable_issue = any(issue.get('fixable', False) for issue in validation_result.get('issues_detected', []))
+                validation_result['can_proceed'] = not has_fixable_issue
+                # Only return early if there are no fixable issues
+                if not has_fixable_issue:
+                    validation_result = self._add_backward_compatibility(validation_result, source)
+                    return validation_result
+                # If there are fixable issues, allow the frontend to prompt for fix
+                # Do not return early; let the rest of the validation flow continue (it will likely skip due to missing df)
+                df = None
+
+            # Source-specific validation
+            if df is not None:
+                if source == "BankOfAmerica":
+                    self._validate_boa_file(df, validation_result)
+                elif source == "Chase":
+                    self._validate_chase_file(df, validation_result, source)
+                elif source == "RestaurantDepot":
+                    self._validate_restaurant_depot_file(df, validation_result)
+                elif source == "Sysco":
+                    self._validate_sysco_file(df, validation_result)
+                else:
+                    # Try to map lowercase source to proper case
+                    source_mapping = {
+                        "chase": "Chase",
+                        "bankofamerica": "BankOfAmerica", 
+                        "restaurantdepot": "RestaurantDepot",
+                        "sysco": "Sysco"
+                    }
+                    
+                    mapped_source = source_mapping.get(source.lower(), source)
+                    if mapped_source != source:
+                        # Retry with mapped source
+                        if mapped_source == "Chase":
+                            self._validate_chase_file(df, validation_result, mapped_source)
+                        elif mapped_source == "BankOfAmerica":
+                            self._validate_boa_file(df, validation_result)
+                        elif mapped_source == "RestaurantDepot":
+                            self._validate_restaurant_depot_file(df, validation_result)
+                        elif mapped_source == "Sysco":
+                            self._validate_sysco_file(df, validation_result)
+                        else:
+                            validation_result['errors'].append(f"Unknown source type: {source}")
+                            validation_result['valid'] = False
+                            validation_result['can_proceed'] = False
+                    else:
+                        validation_result['errors'].append(f"Unknown source type: {source}")
+                        validation_result['valid'] = False
+                        validation_result['can_proceed'] = False
+                # General validation
+                self._validate_general_csv(df, validation_result)
+            
+        except Exception as e:
+            validation_result['errors'].append(f"File reading error: {str(e)}")
+            validation_result['valid'] = False
+            validation_result['can_proceed'] = False
+        
+        # Add backward compatibility for frontend
+        validation_result = self._add_backward_compatibility(validation_result, source)
+        return validation_result
+    
+    def validate_file_against_metadata(self, file_path: Path, source_id: str) -> Dict[str, Any]:
+        """Validate uploaded file against saved sample data metadata."""
+        validation_result = {
+            'valid': True,
+            'errors': [],
+            'warnings': [],
+            'record_count': 0,
+            'metadata_validation': {
+                'has_saved_metadata': False,
+                'column_match_score': 0.0,
+                'structure_compatibility': True,
+                'suggested_mappings': {}
+            }
+        }
+        
+        try:
+            # Basic file validation first
             if not file_path.exists():
                 validation_result['errors'].append("File does not exist")
                 validation_result['valid'] = False
@@ -39,42 +209,173 @@ class ValidationService:
                 validation_result['valid'] = False
                 return validation_result
             
-            if not FileUtils.is_valid_file_size(file_path):
-                validation_result['errors'].append(f"File too large (max {settings.max_file_size_mb}MB)")
-                validation_result['valid'] = False
-                return validation_result
+            # Get saved metadata for this source
+            saved_metadata = self.sample_data_service.get_processed_data(source_id)
             
-            # CSV structure validation
-            is_valid, structure_errors = CSVUtils.validate_csv_structure(file_path, source)
-            if not is_valid:
-                validation_result['errors'].extend(structure_errors)
-                validation_result['valid'] = False
+            if not saved_metadata:
+                validation_result['warnings'].append("No saved metadata found for this source")
+                validation_result['metadata_validation']['has_saved_metadata'] = False
+                # Fall back to basic validation
+                return self.validate_csv_file(file_path, source_id)
             
-            # Read CSV for further validation
+            validation_result['metadata_validation']['has_saved_metadata'] = True
+            
+            # Read the uploaded file
             df = pd.read_csv(file_path)
             validation_result['record_count'] = len(df)
             
-            # Source-specific validation
-            if source == "BankOfAmerica":
-                self._validate_boa_file(df, validation_result)
-            elif source == "Chase":
-                self._validate_chase_file(df, validation_result, source)
-            elif source == "RestaurantDepot":
-                self._validate_restaurant_depot_file(df, validation_result)
-            elif source == "Sysco":
-                self._validate_sysco_file(df, validation_result)
-            else:
-                validation_result['errors'].append(f"Unknown source type: {source}")
+            # Validate against saved metadata
+            metadata_validation = self._validate_against_metadata(
+                df, saved_metadata, source_id
+            )
+            validation_result['metadata_validation'].update(metadata_validation)
+            
+            # If structure is incompatible, add errors
+            if not metadata_validation['structure_compatibility']:
+                validation_result['errors'].append(
+                    "File structure is incompatible with saved metadata"
+                )
                 validation_result['valid'] = False
             
-            # General validation
-            self._validate_general_csv(df, validation_result)
+            # If column match score is too low, add warnings
+            if metadata_validation['column_match_score'] < 0.5:
+                validation_result['warnings'].append(
+                    f"Low column match score ({metadata_validation['column_match_score']:.2f}). "
+                    "File may have different structure than expected."
+                )
+            
+            # Additional validation based on saved metadata
+            self._validate_data_quality_against_metadata(df, saved_metadata, validation_result)
             
         except Exception as e:
-            validation_result['errors'].append(f"File reading error: {str(e)}")
+            validation_result['errors'].append(f"Metadata validation error: {str(e)}")
             validation_result['valid'] = False
         
         return validation_result
+    
+    def _validate_against_metadata(self, df: pd.DataFrame, saved_metadata, source_id: str) -> Dict[str, Any]:
+        """Validate DataFrame against saved metadata."""
+        result = {
+            'column_match_score': 0.0,
+            'structure_compatibility': True,
+            'suggested_mappings': {},
+            'missing_columns': [],
+            'extra_columns': [],
+            'column_analysis': {}
+        }
+        
+        # Get expected columns from saved metadata
+        expected_columns = saved_metadata.columns
+        actual_columns = list(df.columns)
+        
+        # Calculate column match score
+        matching_columns = set(expected_columns) & set(actual_columns)
+        result['column_match_score'] = len(matching_columns) / len(expected_columns) if expected_columns else 0.0
+        
+        # Identify missing and extra columns
+        result['missing_columns'] = list(set(expected_columns) - set(actual_columns))
+        result['extra_columns'] = list(set(actual_columns) - set(expected_columns))
+        
+        # Analyze each column
+        for col in actual_columns:
+            result['column_analysis'][col] = {
+                'expected': col in expected_columns,
+                'data_type': str(df[col].dtype),
+                'null_count': df[col].isnull().sum(),
+                'unique_count': df[col].nunique(),
+                'sample_values': df[col].dropna().head(3).tolist()
+            }
+        
+        # Check structure compatibility
+        if result['column_match_score'] < 0.3:  # Less than 30% match
+            result['structure_compatibility'] = False
+        
+        # Generate suggested mappings based on detected mappings from saved metadata
+        if hasattr(saved_metadata, 'detected_mappings'):
+            result['suggested_mappings'] = saved_metadata.detected_mappings
+        
+        return result
+    
+    def _validate_data_quality_against_metadata(self, df: pd.DataFrame, saved_metadata, validation_result: Dict[str, Any]):
+        """Validate data quality against saved metadata."""
+        try:
+            # Check if we have sample data to compare against
+            if hasattr(saved_metadata, 'sample_data') and saved_metadata.sample_data:
+                sample_data = saved_metadata.sample_data
+                
+                # Compare data patterns
+                for sample_row in sample_data[:3]:  # Check first 3 sample rows
+                    for col, expected_value in sample_row.items():
+                        if col in df.columns:
+                            # Check if the column contains similar data types
+                            actual_values = df[col].dropna().head(10)
+                            if len(actual_values) > 0:
+                                # Basic type checking
+                                expected_type = type(expected_value)
+                                actual_types = [type(val) for val in actual_values]
+                                
+                                if expected_type in actual_types:
+                                    validation_result['metadata_validation']['data_quality'] = 'good'
+                                else:
+                                    validation_result['warnings'].append(
+                                        f"Column '{col}' has different data types than expected"
+                                    )
+            
+            # Check for reasonable data ranges based on sample data
+            if hasattr(saved_metadata, 'sample_data') and saved_metadata.sample_data:
+                self._check_data_ranges_against_sample(df, saved_metadata.sample_data, validation_result)
+                
+        except Exception as e:
+            validation_result['warnings'].append(f"Data quality validation error: {str(e)}")
+    
+    def _check_data_ranges_against_sample(self, df: pd.DataFrame, sample_data: List[Dict], validation_result: Dict[str, Any]):
+        """Check if data ranges are reasonable compared to sample data."""
+        try:
+            for sample_row in sample_data[:5]:  # Check first 5 sample rows
+                for col, sample_value in sample_row.items():
+                    if col in df.columns and sample_value is not None:
+                        # Check numeric columns
+                        if isinstance(sample_value, (int, float)):
+                            actual_values = pd.to_numeric(df[col], errors='coerce').dropna()
+                            if len(actual_values) > 0:
+                                sample_val = float(sample_value)
+                                actual_min = actual_values.min()
+                                actual_max = actual_values.max()
+                                
+                                # Check if values are in reasonable range (within 10x of sample)
+                                if abs(actual_min) > abs(sample_val) * 10 or abs(actual_max) > abs(sample_val) * 10:
+                                    validation_result['warnings'].append(
+                                        f"Column '{col}' contains values outside expected range "
+                                        f"(sample: {sample_val}, actual: {actual_min} to {actual_max})"
+                                    )
+                        
+                        # Check date columns
+                        elif isinstance(sample_value, str) and self._looks_like_date(sample_value):
+                            actual_dates = pd.to_datetime(df[col], errors='coerce').dropna()
+                            if len(actual_dates) > 0:
+                                sample_date = pd.to_datetime(sample_value, errors='coerce')
+                                if pd.notna(sample_date):
+                                    actual_min = actual_dates.min()
+                                    actual_max = actual_dates.max()
+                                    
+                                    # Check if dates are within reasonable range (within 5 years)
+                                    if abs((actual_min - sample_date).days) > 1825 or abs((actual_max - sample_date).days) > 1825:
+                                        validation_result['warnings'].append(
+                                            f"Column '{col}' contains dates outside expected range "
+                                            f"(sample: {sample_date.strftime('%Y-%m-%d')}, "
+                                            f"actual: {actual_min.strftime('%Y-%m-%d')} to {actual_max.strftime('%Y-%m-%d')})"
+                                        )
+                                        
+        except Exception as e:
+            validation_result['warnings'].append(f"Data range validation error: {str(e)}")
+    
+    def _looks_like_date(self, value: str) -> bool:
+        """Check if a string value looks like a date."""
+        try:
+            pd.to_datetime(value)
+            return True
+        except:
+            return False
     
     def _validate_boa_file(self, df: pd.DataFrame, result: Dict[str, Any]):
         """Validate Bank of America file."""
@@ -198,36 +499,53 @@ class ValidationService:
         found_description_col = 'Description' if 'Description' in df.columns else None
         found_amount_col = 'Amount' if 'Amount' in df.columns else None
         
-        # Add source information to result for general validation
-        result['source'] = source
+        # Enhanced validation: Check for column misalignment issues
+        if found_description_col and len(df) > 0:
+            sample_desc = df[found_description_col].iloc[0]
+            if isinstance(sample_desc, str) and len(sample_desc) > 200:
+                # This indicates complex transaction data instead of simple descriptions
+                result['issues_detected'].append({
+                    'type': 'column_misalignment',
+                    'message': 'The Description column contains complex transaction data instead of simple descriptions',
+                    'fixable': False,
+                    'suggestion': 'Re-export the file from Chase using the standard CSV export option. The current export format is not compatible with our parser.',
+                    'details': f'Sample description length: {len(sample_desc)} characters'
+                })
+                result['user_action_required'] = True
+                result['can_proceed'] = False
+                result['fix_suggestions'].append('Re-export from Chase using standard CSV format')
         
         # Validate date format
         if found_date_col:
             invalid_dates = []
-            for date_str in df[found_date_col].dropna():
-                if CSVUtils.parse_date(str(date_str)) is None:
-                    invalid_dates.append(str(date_str))
+            for date_val in df[found_date_col].dropna():
+                # Handle different data types properly
+                if pd.isna(date_val):
+                    continue
+                try:
+                    date_str = str(date_val)
+                    if CSVUtils.parse_date(date_str) is None:
+                        invalid_dates.append(date_str)
+                except Exception as e:
+                    # If we can't convert to string, it's likely a data type issue
+                    invalid_dates.append(f"Invalid data type: {type(date_val).__name__}")
             
             if invalid_dates:
                 result['warnings'].append(f"Invalid date formats found: {invalid_dates[:5]}")
-            
-            # For Chase files, also check that we have valid dates
-            if source == "Chase" and found_date_col == "Posting Date":
-                try:
-                    # Try to parse dates to ensure they're valid
-                    pd.to_datetime(df[found_date_col], errors='coerce')
-                    valid_dates = pd.to_datetime(df[found_date_col], errors='coerce').dropna()
-                    if len(valid_dates) > 0:
-                        result['info'] = f"Found {len(valid_dates)} valid dates in Posting Date column"
-                except Exception as e:
-                    result['warnings'].append(f"Date parsing error in Posting Date column: {str(e)}")
         
         # Validate amounts
         if found_amount_col:
             invalid_amounts = []
-            for amount in df[found_amount_col].dropna():
-                if not CSVUtils.is_valid_amount(amount):
-                    invalid_amounts.append(str(amount))
+            for amount_val in df[found_amount_col].dropna():
+                # Handle different data types properly
+                if pd.isna(amount_val):
+                    continue
+                try:
+                    if not CSVUtils.is_valid_amount(amount_val):
+                        invalid_amounts.append(str(amount_val))
+                except Exception as e:
+                    # If we can't validate the amount, it's likely a data type issue
+                    invalid_amounts.append(f"Invalid data type: {type(amount_val).__name__}")
             
             if invalid_amounts:
                 result['warnings'].append(f"Invalid amounts found: {invalid_amounts[:5]}")
@@ -247,105 +565,149 @@ class ValidationService:
         # Check data quality
         if len(df) > 0:
             # Check for reasonable date range
-            if found_date_col:
+            if found_date_col and found_date_col in df.columns:
                 try:
-                    dates = pd.to_datetime(df[found_date_col], errors='coerce')
-                    valid_dates = dates.dropna()
-                    if len(valid_dates) > 0:
-                        min_date = valid_dates.min()
-                        max_date = valid_dates.max()
-                        current_year = datetime.now().year
-                        
-                        if min_date.year < 2020:
-                            result['warnings'].append(f"File contains very old dates (earliest: {min_date.strftime('%Y-%m-%d')})")
-                        
-                        if max_date.year > current_year:
-                            result['warnings'].append(f"File contains future dates (latest: {max_date.strftime('%Y-%m-%d')})")
+                    # Handle case where the column might contain complex data
+                    date_series = df[found_date_col]
+                    if date_series.dtype == 'object':
+                        # Try to extract dates from complex strings
+                        sample_value = str(date_series.iloc[0]) if len(date_series) > 0 else ""
+                        if len(sample_value) > 100:  # Complex data, skip date validation
+                            result['warnings'].append(f"Date column '{found_date_col}' contains complex data, skipping date validation")
+                        else:
+                            dates = pd.to_datetime(date_series, errors='coerce')
+                            valid_dates = dates.dropna()
+                            if len(valid_dates) > 0:
+                                min_date = valid_dates.min()
+                                max_date = valid_dates.max()
+                                current_year = datetime.now().year
+                                
+                                if min_date.year < 2020:
+                                    result['warnings'].append(f"File contains very old dates (earliest: {min_date.strftime('%Y-%m-%d')})")
+                                
+                                if max_date.year > current_year:
+                                    result['warnings'].append(f"File contains future dates (latest: {max_date.strftime('%Y-%m-%d')})")
+                    else:
+                        # Numeric date column, try standard parsing
+                        dates = pd.to_datetime(date_series, errors='coerce')
+                        valid_dates = dates.dropna()
+                        if len(valid_dates) > 0:
+                            min_date = valid_dates.min()
+                            max_date = valid_dates.max()
+                            current_year = datetime.now().year
+                            
+                            if min_date.year < 2020:
+                                result['warnings'].append(f"File contains very old dates (earliest: {min_date.strftime('%Y-%m-%d')})")
+                            
+                            if max_date.year > current_year:
+                                result['warnings'].append(f"File contains future dates (latest: {max_date.strftime('%Y-%m-%d')})")
                 except Exception as e:
                     result['warnings'].append(f"Date parsing error: {str(e)}")
             
             # Check for reasonable amount ranges
-            if found_amount_col:
+            if found_amount_col and found_amount_col in df.columns:
                 try:
-                    amounts = df[found_amount_col].apply(CSVUtils.clean_amount)
-                    valid_amounts = amounts[amounts != 0]
-                    if len(valid_amounts) > 0:
-                        min_amount = valid_amounts.min()
-                        max_amount = valid_amounts.max()
-                        
-                        if abs(min_amount) > 1000000:  # $1M
-                            result['warnings'].append(f"File contains very large amounts (min: ${min_amount:,.2f})")
-                        
-                        if abs(max_amount) > 1000000:  # $1M
-                            result['warnings'].append(f"File contains very large amounts (max: ${max_amount:,.2f})")
+                    amount_series = df[found_amount_col]
+                    if amount_series.dtype == 'object':
+                        # Handle complex string data
+                        sample_value = str(amount_series.iloc[0]) if len(amount_series) > 0 else ""
+                        if len(sample_value) > 100:  # Complex data, skip amount validation
+                            result['warnings'].append(f"Amount column '{found_amount_col}' contains complex data, skipping amount validation")
+                        else:
+                            amounts = amount_series.apply(CSVUtils.clean_amount)
+                            valid_amounts = amounts[amounts != 0]
+                            if len(valid_amounts) > 0:
+                                min_amount = valid_amounts.min()
+                                max_amount = valid_amounts.max()
+                                
+                                if abs(min_amount) > 1000000:  # $1M
+                                    result['warnings'].append(f"File contains very large amounts (min: ${min_amount:,.2f})")
+                                
+                                if abs(max_amount) > 1000000:  # $1M
+                                    result['warnings'].append(f"File contains very large amounts (max: ${max_amount:,.2f})")
+                    else:
+                        # Numeric amount column
+                        amounts = amount_series.apply(CSVUtils.clean_amount)
+                        valid_amounts = amounts[amounts != 0]
+                        if len(valid_amounts) > 0:
+                            min_amount = valid_amounts.min()
+                            max_amount = valid_amounts.max()
+                            
+                            if abs(min_amount) > 1000000:  # $1M
+                                result['warnings'].append(f"File contains very large amounts (min: ${min_amount:,.2f})")
+                            
+                            if abs(max_amount) > 1000000:  # $1M
+                                result['warnings'].append(f"File contains very large amounts (max: ${max_amount:,.2f})")
                 except Exception as e:
                     result['warnings'].append(f"Amount parsing error: {str(e)}")
             
-            # Check optional columns for Chase files
-            optional_columns = ['Balance', 'Check or Slip #', 'Type', 'Details']
-            for col in optional_columns:
-                if col in df.columns:
-                    missing_count = df[col].isna().sum()
-                    total_count = len(df)
-                    if missing_count > 0:
-                        # For optional columns, only warn if ALL values are missing
-                        if missing_count == total_count:
-                            result['warnings'].append(f"Optional column '{col}' has no data")
-                        else:
-                            # Log info about optional column usage
-                            result['info'] = f"Optional column '{col}' has {total_count - missing_count} populated values out of {total_count} total"
+            # Check type values if present
+            if 'Type' in df.columns:
+                unique_types = df['Type'].dropna().unique()
+                if len(unique_types) > 0:
+                    result['info'] = f"Type values found: {', '.join(unique_types)}"
     
     def _validate_restaurant_depot_file(self, df: pd.DataFrame, result: Dict[str, Any]):
         """Validate Restaurant Depot file."""
-        # Restaurant Depot files may have varying structures
-        # Check for common invoice-related columns
-        invoice_indicators = ['Invoice', 'Date', 'Total', 'Amount', 'Item']
-        found_indicators = [col for col in df.columns if any(indicator in col for indicator in invoice_indicators)]
+        # Restaurant Depot files have specific structure
+        # Focus on basic validation for now
+        if len(df.columns) < 3:
+            result['errors'].append("File has too few columns for Restaurant Depot format")
+            result['valid'] = False
         
-        if len(found_indicators) < 2:
-            result['warnings'].append("File may not be in expected Restaurant Depot format")
+        # Check for reasonable data
+        if len(df) > 0:
+            result['info'] = f"Found {len(df)} rows with {len(df.columns)} columns"
     
     def _validate_sysco_file(self, df: pd.DataFrame, result: Dict[str, Any]):
         """Validate Sysco file."""
-        # Sysco files may have varying structures
-        # Check for common invoice-related columns
-        invoice_indicators = ['Invoice', 'Date', 'Total', 'Amount', 'Item']
-        found_indicators = [col for col in df.columns if any(indicator in col for indicator in invoice_indicators)]
+        # Sysco files have specific structure
+        # Focus on basic validation for now
+        if len(df.columns) < 3:
+            result['errors'].append("File has too few columns for Sysco format")
+            result['valid'] = False
         
-        if len(found_indicators) < 2:
-            result['warnings'].append("File may not be in expected Sysco format")
+        # Check for reasonable data
+        if len(df) > 0:
+            result['info'] = f"Found {len(df)} rows with {len(df.columns)} columns"
     
     def _validate_general_csv(self, df: pd.DataFrame, result: Dict[str, Any]):
-        """General CSV validation."""
+        """Validate general CSV structure and quality."""
         # Check for empty file
         if len(df) == 0:
-            result['warnings'].append("File is empty")
+            result['errors'].append("File is empty")
+            result['valid'] = False
+            return
+        
+        # Check for too many columns (potential parsing issues)
+        if len(df.columns) > 50:
+            result['warnings'].append(f"File has many columns ({len(df.columns)}), may have parsing issues")
+        
+        # Check for completely empty columns
+        empty_columns = []
+        for col in df.columns:
+            if df[col].isna().all():
+                empty_columns.append(col)
+        
+        if empty_columns:
+            result['warnings'].append(f"Found empty columns: {', '.join(empty_columns)}")
         
         # Check for duplicate rows
-        if len(df) != len(df.drop_duplicates()):
-            result['warnings'].append("File contains duplicate rows")
+        duplicates = df.duplicated().sum()
+        if duplicates > 0:
+            result['warnings'].append(f"Found {duplicates} duplicate rows")
         
-        # Check for missing values in critical columns (but not optional columns)
-        # Define optional columns for different sources
-        optional_columns = {
-            'Chase': ['Balance', 'Check or Slip #', 'Type', 'Details'],
-            'BankOfAmerica': ['Status'],
-            'RestaurantDepot': [],
-            'Sysco': []
-        }
+        # Check for reasonable row count
+        if len(df) > 100000:  # 100K rows
+            result['warnings'].append(f"Large file with {len(df):,} rows, processing may take time")
         
-        # Get the source from the result if available, otherwise assume general validation
-        source = result.get('source', 'general')
-        source_optional_cols = optional_columns.get(source, [])
-        
+        # Check for mixed data types in columns
         for col in df.columns:
-            # Skip optional columns for their respective sources
-            if col in source_optional_cols:
-                continue
-                
-            missing_count = df[col].isna().sum()
-            if missing_count > len(df) * 0.5:  # More than 50% missing
-                result['warnings'].append(f"Column '{col}' has many missing values ({missing_count})")
+            if df[col].dtype == 'object':  # String/object column
+                # Check if it might be numeric
+                numeric_count = pd.to_numeric(df[col], errors='coerce').notna().sum()
+                if numeric_count > 0 and numeric_count < len(df):
+                    result['warnings'].append(f"Column '{col}' contains mixed data types")
     
     def validate_file_size(self, file_size: int, max_size_mb: Optional[int] = None) -> bool:
         """Validate file size."""
@@ -367,187 +729,501 @@ class ValidationService:
         """Validate processing options."""
         errors = []
         
+        # Validate group_by option
+        if 'group_by' in options:
+            group_by = options['group_by']
+            if not isinstance(group_by, str):
+                errors.append("group_by must be a string")
+            elif group_by not in ['description', 'date', 'none']:
+                errors.append("group_by must be 'description', 'date', or 'none'")
+        
+        # Validate include_source_file option
+        if 'include_source_file' in options:
+            include_source_file = options['include_source_file']
+            if not isinstance(include_source_file, bool):
+                errors.append("include_source_file must be a boolean")
+        
+        # Validate date_format option
         if 'date_format' in options:
             date_format = options['date_format']
             if not isinstance(date_format, str):
                 errors.append("date_format must be a string")
+            # Add more specific date format validation if needed
         
-        if 'currency_format' in options:
-            currency_format = options['currency_format']
-            if not isinstance(currency_format, str):
-                errors.append("currency_format must be a string")
-        
-        if 'group_by_description' in options:
-            group_by = options['group_by_description']
-            if not isinstance(group_by, bool):
-                errors.append("group_by_description must be a boolean")
-        
-        if 'include_source_file' in options:
-            include_source = options['include_source_file']
-            if not isinstance(include_source, bool):
-                errors.append("include_source_file must be a boolean")
+        # Validate amount_format option
+        if 'amount_format' in options:
+            amount_format = options['amount_format']
+            if not isinstance(amount_format, str):
+                errors.append("amount_format must be a string")
+            elif amount_format not in ['USD', 'EUR', 'GBP']:
+                errors.append("amount_format must be 'USD', 'EUR', or 'GBP'")
         
         return len(errors) == 0, errors
     
     def analyze_file_structure(self, file_path: Path, source: str) -> Dict[str, Any]:
-        """Analyze file structure and provide detailed information."""
+        """Analyze file structure for mapping suggestions."""
         analysis = {
-            'file_path': str(file_path),
             'source': source,
-            'exists': file_path.exists(),
-            'file_size_mb': 0,
+            'filename': file_path.name,
+            'file_size_bytes': file_path.stat().st_size,
             'columns': [],
             'sample_data': [],
-            'issues': [],
-            'recommendations': []
+            'detected_mappings': {},
+            'suggestions': []
         }
         
-        if not file_path.exists():
-            analysis['issues'].append("File does not exist")
-            return analysis
-        
         try:
-            # Get file size
-            analysis['file_size_mb'] = FileUtils.get_file_size_mb(file_path)
-            
-            # Read CSV with different parsing options
-            df = None
-            parsing_errors = []
-            
-            # Try different CSV parsing approaches
-            try:
-                # First try standard parsing
-                df = pd.read_csv(file_path)
-            except Exception as e1:
-                parsing_errors.append(f"Standard parsing failed: {str(e1)}")
-                try:
-                    # Try with different quote character
-                    df = pd.read_csv(file_path, quotechar='"', escapechar='\\')
-                except Exception as e2:
-                    parsing_errors.append(f"Quote parsing failed: {str(e2)}")
-                    try:
-                        # Try with different encoding
-                        df = pd.read_csv(file_path, encoding='utf-8')
-                    except Exception as e3:
-                        parsing_errors.append(f"UTF-8 parsing failed: {str(e3)}")
-                        try:
-                            # Try with different delimiter
-                            df = pd.read_csv(file_path, sep=',', engine='python')
-                        except Exception as e4:
-                            parsing_errors.append(f"Python engine parsing failed: {str(e4)}")
-                            # If all parsing attempts fail, return error
-                            analysis['issues'].extend(parsing_errors)
-                            analysis['issues'].append("Unable to parse CSV file. File may be corrupted or in an unsupported format.")
-                            return analysis
-            
-            if df is None:
-                analysis['issues'].append("Failed to read CSV file")
-                return analysis
-                
+            # Read CSV file
+            df = pd.read_csv(file_path)
             analysis['columns'] = list(df.columns)
-            analysis['total_rows'] = len(df)
             
-            # Get sample data (first 3 rows to avoid large descriptions)
-            if len(df) > 0:
-                try:
-                    sample_df = df.head(3)
-                    # Convert to dict but handle large text fields
-                    sample_data = []
-                    for _, row in sample_df.iterrows():
-                        row_dict = {}
-                        for col, val in row.items():
-                            if pd.isna(val):
-                                row_dict[col] = None
-                            else:
-                                val_str = str(val)
-                                # Truncate very long descriptions
-                                if len(val_str) > 100:
-                                    row_dict[col] = val_str[:100] + "..."
-                                else:
-                                    row_dict[col] = val_str
-                        sample_data.append(row_dict)
-                    analysis['sample_data'] = sample_data
-                except Exception as e:
-                    analysis['issues'].append(f"Error creating sample data: {str(e)}")
+            # Get sample data (first 5 rows) with proper JSON serialization
+            sample_df = df.head(5)
+            sample_records = []
+            for _, row in sample_df.iterrows():
+                record = {}
+                for col in df.columns:
+                    value = row[col]
+                    # Handle infinite and NaN values
+                    if pd.isna(value):
+                        record[col] = None
+                    elif isinstance(value, (int, float)) and (pd.isna(value) or np.isinf(value)):
+                        record[col] = None
+                    else:
+                        record[col] = str(value) if not isinstance(value, (int, float, str, bool)) else value
+                sample_records.append(record)
+            analysis['sample_data'] = sample_records
             
-            # Check for common issues
-            if len(df) == 0:
-                analysis['issues'].append("File is empty")
+            # Detect potential mappings based on column names
+            analysis['detected_mappings'] = self._detect_column_mappings(df.columns, source)
             
-            # Check for missing values in key columns
-            key_columns = self._get_key_columns(source)
-            found_columns = []
-            
-            # Define optional columns for different sources
-            optional_columns = {
-                'Chase': ['Balance', 'Check or Slip', 'Type', 'Details'],
-                'BankOfAmerica': ['Status'],
-                'RestaurantDepot': [],
-                'Sysco': []
-            }
-            source_optional_cols = optional_columns.get(source, [])
-            
-            for col in key_columns:
-                if col in df.columns:
-                    found_columns.append(col)
-                    try:
-                        missing_count = df[col].isna().sum()
-                        if missing_count > 0:
-                            # For optional columns, only report if ALL values are missing
-                            if col in source_optional_cols:
-                                if missing_count == len(df):
-                                    analysis['issues'].append(f"Optional column '{col}' has no data")
-                                else:
-                                    # Log info about optional column usage
-                                    populated_count = len(df) - missing_count
-                                    analysis['info'] = f"Optional column '{col}' has {populated_count} populated values out of {len(df)} total"
-                            else:
-                                # For required columns, report any missing values
-                                analysis['issues'].append(f"Column '{col}' has {missing_count} missing values")
-                    except Exception as e:
-                        analysis['issues'].append(f"Error checking column '{col}': {str(e)}")
-                else:
-                    # Only report missing required columns, not optional ones
-                    if col not in source_optional_cols:
-                        analysis['issues'].append(f"Missing key column: {col}")
-            
-            # Provide column mapping information
-            if found_columns:
-                analysis['info'] = f"Found expected columns: {', '.join(found_columns)}"
-            
-            # Check for data type issues
-            if 'Date' in df.columns or 'Posting Date' in df.columns or 'Transaction Date' in df.columns:
-                date_col = 'Date' if 'Date' in df.columns else ('Posting Date' if 'Posting Date' in df.columns else 'Transaction Date')
-                try:
-                    pd.to_datetime(df[date_col], errors='coerce')
-                except Exception as e:
-                    analysis['issues'].append(f"Date column contains invalid date formats: {str(e)}")
-            
-            if 'Amount' in df.columns or 'Debit' in df.columns or 'Credit' in df.columns:
-                amount_col = 'Amount' if 'Amount' in df.columns else ('Debit' if 'Debit' in df.columns else 'Credit')
-                try:
-                    df[amount_col].apply(CSVUtils.clean_amount)
-                except Exception as e:
-                    analysis['issues'].append(f"Amount column contains invalid number formats: {str(e)}")
-            
-            # Provide recommendations
-            if len(analysis['issues']) == 0:
-                analysis['recommendations'].append("File appears to be in good format")
-            else:
-                analysis['recommendations'].append("Review and fix the issues listed above")
+            # Generate suggestions
+            analysis['suggestions'] = self._generate_mapping_suggestions(df, source)
             
         except Exception as e:
-            analysis['issues'].append(f"Error reading file: {str(e)}")
+            analysis['error'] = str(e)
         
         return analysis
+    
+    def _detect_column_mappings(self, columns: List[str], source: str) -> Dict[str, str]:
+        """Detect potential column mappings based on column names."""
+        mappings = {}
+        
+        # Common column name patterns
+        date_patterns = ['date', 'posting date', 'transaction date', 'time']
+        description_patterns = ['description', 'desc', 'original description', 'details', 'memo']
+        amount_patterns = ['amount', 'debit', 'credit', 'balance', 'total']
+        
+        for col in columns:
+            col_lower = col.lower()
+            
+            # Date mapping
+            if any(pattern in col_lower for pattern in date_patterns):
+                mappings['date'] = col
+            
+            # Description mapping
+            elif any(pattern in col_lower for pattern in description_patterns):
+                mappings['description'] = col
+            
+            # Amount mapping
+            elif any(pattern in col_lower for pattern in amount_patterns):
+                mappings['amount'] = col
+        
+        return mappings
+    
+    def _generate_mapping_suggestions(self, df: pd.DataFrame, source: str) -> List[str]:
+        """Generate mapping suggestions based on data analysis."""
+        suggestions = []
+        
+        # Check for date columns
+        for col in df.columns:
+            if self._looks_like_date_column(df[col]):
+                suggestions.append(f"Column '{col}' appears to contain dates")
+        
+        # Check for amount columns
+        for col in df.columns:
+            if self._looks_like_amount_column(df[col]):
+                suggestions.append(f"Column '{col}' appears to contain amounts")
+        
+        # Check for description columns
+        for col in df.columns:
+            if self._looks_like_description_column(df[col]):
+                suggestions.append(f"Column '{col}' appears to contain descriptions")
+        
+        return suggestions
+    
+    def _looks_like_date_column(self, series: pd.Series) -> bool:
+        """Check if a column looks like it contains dates."""
+        try:
+            # Try to parse as dates
+            sample_values = series.dropna().head(10)
+            if len(sample_values) == 0:
+                return False
+            
+            parsed_dates = pd.to_datetime(sample_values, errors='coerce')
+            valid_dates = parsed_dates.notna().sum()
+            
+            return valid_dates / len(sample_values) > 0.7  # 70% success rate
+        except Exception:
+            return False
+    
+    def _looks_like_amount_column(self, series: pd.Series) -> bool:
+        """Check if a column looks like it contains amounts."""
+        try:
+            # Try to parse as numbers
+            sample_values = series.dropna().head(10)
+            if len(sample_values) == 0:
+                return False
+            
+            # Clean and parse amounts
+            cleaned_values = sample_values.astype(str).str.replace('$', '').str.replace(',', '')
+            parsed_amounts = pd.to_numeric(cleaned_values, errors='coerce')
+            valid_amounts = parsed_amounts.notna().sum()
+            
+            return valid_amounts / len(sample_values) > 0.7  # 70% success rate
+        except Exception:
+            return False
+    
+    def _looks_like_description_column(self, series: pd.Series) -> bool:
+        """Check if a column looks like it contains descriptions."""
+        try:
+            # Check for text-like characteristics
+            sample_values = series.dropna().head(10)
+            if len(sample_values) == 0:
+                return False
+            
+            # Check if values are strings and have reasonable length
+            string_values = sample_values.astype(str)
+            avg_length = string_values.str.len().mean()
+            
+            return avg_length > 5 and avg_length < 200  # Reasonable description length
+        except Exception:
+            return False
     
     def _get_key_columns(self, source: str) -> List[str]:
         """Get key columns for a specific source."""
         if source == "BankOfAmerica":
             return ['Status', 'Date', 'Original Description', 'Amount']
         elif source == "Chase":
-            return ['Posting Date', 'Description', 'Amount', 'Details', 'Type', 'Balance', 'Check or Slip']
-        elif source in ["RestaurantDepot", "Sysco"]:
-            return ['Date', 'Description', 'Amount', 'Total']
+            return ['Posting Date', 'Description', 'Amount']
+        elif source == "RestaurantDepot":
+            return ['Date', 'Description', 'Amount']
+        elif source == "Sysco":
+            return ['Date', 'Description', 'Amount']
         else:
-            return [] 
+            return []
+    
+    def _fix_csv_formatting(self, file_path: Path) -> Path:
+        """Fix common CSV formatting issues like embedded linefeeds."""
+        try:
+            # Read the original file
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Check if file has embedded linefeeds in quoted fields
+            if '\n' in content and '"' in content:
+                # Create a backup of the original file
+                backup_path = file_path.with_suffix('.csv.backup')
+                with open(backup_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                
+                # Fix embedded linefeeds in quoted fields
+                fixed_content = self._fix_embedded_linefeeds(content)
+                
+                # Write the fixed content back to the original file
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(fixed_content)
+                
+                processing_logger.log_system_event(
+                    f"Fixed CSV formatting issues in {file_path.name}",
+                    {"backup_created": str(backup_path)}
+                )
+            
+            return file_path
+            
+        except Exception as e:
+            processing_logger.log_system_event(
+                f"Error fixing CSV formatting for {file_path.name}: {str(e)}",
+                level="error"
+            )
+            return file_path
+    
+    def _fix_embedded_linefeeds(self, content: str) -> str:
+        """Fix embedded linefeeds in quoted CSV fields."""
+        lines = content.split('\n')
+        fixed_lines = []
+        current_line = ""
+        in_quotes = False
+        
+        for line in lines:
+            if not in_quotes:
+                # Start of a new record
+                current_line = line
+                # Count quotes in this line
+                quote_count = line.count('"')
+                if quote_count % 2 == 1:
+                    # Odd number of quotes means we're entering a quoted field
+                    in_quotes = True
+                else:
+                    # Even number of quotes, complete record
+                    fixed_lines.append(current_line)
+            else:
+                # We're inside a quoted field, append to current line
+                current_line += " " + line
+                # Count quotes in this line
+                quote_count = line.count('"')
+                if quote_count % 2 == 1:
+                    # Odd number of quotes means we're exiting the quoted field
+                    in_quotes = False
+                    fixed_lines.append(current_line)
+                    current_line = ""
+        
+        # If we still have an incomplete line, add it
+        if current_line:
+            fixed_lines.append(current_line)
+        
+        return '\n'.join(fixed_lines)
+    
+    def _detect_source_specific_issues(self, file_path: Path, source: str) -> List[Dict[str, Any]]:
+        """Detect source-specific issues in the file."""
+        issues = []
+        
+        try:
+            df = pd.read_csv(file_path)
+            
+            # Map source to proper case
+            source_mapping = {
+                "chase": "Chase",
+                "bankofamerica": "BankOfAmerica", 
+                "restaurantdepot": "RestaurantDepot",
+                "sysco": "Sysco"
+            }
+            mapped_source = source_mapping.get(source.lower(), source)
+            
+            if mapped_source == "Chase":
+                issues.extend(self._detect_chase_issues(df))
+            elif mapped_source == "BankOfAmerica":
+                issues.extend(self._detect_boa_issues(df))
+            elif mapped_source == "RestaurantDepot":
+                issues.extend(self._detect_restaurant_depot_issues(df))
+            elif mapped_source == "Sysco":
+                issues.extend(self._detect_sysco_issues(df))
+                
+        except Exception as e:
+            issues.append({
+                'type': 'parsing_error',
+                'message': f"Error reading CSV file: {str(e)}",
+                'fixable': False,
+                'suggestion': 'Check if the file is a valid CSV format'
+            })
+        
+        return issues
+    
+    def _detect_chase_issues(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """Detect Chase-specific issues."""
+        issues = []
+        
+        # Debug: Log the columns to see what we're working with
+        processing_logger.log_system_event(
+            f"Chase file columns: {list(df.columns)}", level="info"
+        )
+        
+        # Check for column misalignment (Description column contains complex transaction data)
+        if 'Description' in df.columns and len(df) > 0:
+            sample_desc = df['Description'].iloc[0]
+            processing_logger.log_system_event(
+                f"Sample Description value: {sample_desc[:100]}... (length: {len(str(sample_desc))})", level="info"
+            )
+            if isinstance(sample_desc, str) and len(sample_desc) > 200:
+                issues.append({
+                    'type': 'column_misalignment',
+                    'message': 'Chase file has complex transaction data in Description column',
+                    'fixable': True,  # Mark as fixable since we can parse it
+                    'suggestion': 'Apply automatic parsing to extract transaction details',
+                    'details': f'Description length: {len(sample_desc)} characters'
+                })
+        else:
+            # If no Description column, check if we have any column with complex data
+            for col in df.columns:
+                if len(df) > 0:
+                    sample_value = df[col].iloc[0]
+                    if isinstance(sample_value, str) and len(sample_value) > 200:
+                        issues.append({
+                            'type': 'column_misalignment',
+                            'message': f'Chase file has complex transaction data in {col} column',
+                            'fixable': True,  # Mark as fixable since we can parse it
+                            'suggestion': 'Apply automatic parsing to extract transaction details',
+                            'details': f'{col} length: {len(sample_value)} characters'
+                        })
+                        break
+        
+        return issues
+    
+    def _detect_boa_issues(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """Detect Bank of America specific issues."""
+        issues = []
+        
+        # Check for missing required columns
+        required_columns = ['Status', 'Date', 'Original Description', 'Amount']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            issues.append({
+                'type': 'missing_columns',
+                'message': f'Missing required columns: {", ".join(missing_columns)}',
+                'fixable': False,
+                'suggestion': 'Ensure the exported file includes all required columns: Status, Date, Original Description, Amount',
+                'details': f'Available columns: {list(df.columns)}'
+            })
+        
+        return issues
+    
+    def _detect_restaurant_depot_issues(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """Detect Restaurant Depot specific issues."""
+        issues = []
+        
+        # Restaurant Depot files are typically invoice files, so we check for basic structure
+        if len(df.columns) < 3:
+            issues.append({
+                'type': 'insufficient_data',
+                'message': 'File appears to have insufficient data columns for an invoice',
+                'fixable': False,
+                'suggestion': 'Ensure the file contains invoice data with multiple columns',
+                'details': f'Found {len(df.columns)} columns'
+            })
+        
+        return issues
+    
+    def _detect_sysco_issues(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """Detect Sysco specific issues."""
+        issues = []
+        
+        # Sysco files are typically invoice files, so we check for basic structure
+        if len(df.columns) < 3:
+            issues.append({
+                'type': 'insufficient_data',
+                'message': 'File appears to have insufficient data columns for an invoice',
+                'fixable': False,
+                'suggestion': 'Ensure the file contains invoice data with multiple columns',
+                'details': f'Found {len(df.columns)} columns'
+            })
+        
+        return issues
+    
+    def _apply_source_specific_fix(self, file_path: Path, source: str, issue: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply source-specific fixes for detected issues."""
+        try:
+            if issue['type'] == 'csv_formatting':
+                # This is already handled by _fix_csv_formatting
+                return {
+                    'success': True,
+                    'message': 'CSV formatting issues fixed'
+                }
+            
+            elif issue['type'] == 'column_misalignment':
+                # For Chase files with complex transaction data, we can parse and restructure
+                if source.lower() == 'chase':
+                    return self._fix_chase_column_misalignment(file_path, issue)
+            
+            # Add more source-specific fixes here as needed
+            return {
+                'success': False,
+                'message': f'No automatic fix available for {issue["type"]}'
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'message': f'Error applying fix: {str(e)}'
+            }
+    
+    def _fix_chase_column_misalignment(self, file_path: Path, issue: Dict[str, Any]) -> Dict[str, Any]:
+        """Fix Chase column misalignment by parsing complex transaction data."""
+        try:
+            import pandas as pd
+            import re
+            
+            # Read the original file
+            df = pd.read_csv(file_path)
+            
+            # Create a backup
+            backup_path = file_path.with_suffix('.csv.backup')
+            df.to_csv(backup_path, index=False)
+            
+            # Parse complex transaction data in Description column
+            if 'Description' in df.columns:
+                # Extract key transaction details using regex patterns
+                def extract_transaction_details(desc):
+                    if pd.isna(desc) or not isinstance(desc, str):
+                        return desc
+                    
+                    # Look for common transaction patterns
+                    patterns = [
+                        r'(\d{2}/\d{2}/\d{4})\s*(\d{2}:\d{2}:\d{2})?\s*(.*?)(?=\s*\d{2}/\d{2}/\d{4}|$)',
+                        r'(.*?)\s*(\d{2}/\d{2}/\d{4})\s*(\d{2}:\d{2}:\d{2})?',
+                        r'(.*?)\s*(\d{2}:\d{2}:\d{2})\s*(\d{2}/\d{2}/\d{4})'
+                    ]
+                    
+                    for pattern in patterns:
+                        match = re.search(pattern, desc)
+                        if match:
+                            return match.group(1).strip()
+                    
+                    # If no pattern matches, return first 100 characters
+                    return desc[:100] if len(desc) > 100 else desc
+                
+                # Apply the fix
+                df['Description'] = df['Description'].apply(extract_transaction_details)
+            
+            # Save the fixed file
+            df.to_csv(file_path, index=False)
+            
+            processing_logger.log_system_event(
+                f"Fixed Chase column misalignment in {file_path.name}", level="info"
+            )
+            
+            return {
+                'success': True,
+                'message': 'Chase transaction data parsed and simplified',
+                'backup_created': str(backup_path)
+            }
+            
+        except Exception as e:
+            processing_logger.log_system_event(
+                f"Error fixing Chase column misalignment: {str(e)}", level="error"
+            )
+            return {
+                'success': False,
+                'message': f'Error fixing Chase column misalignment: {str(e)}'
+            }
+    
+    def _add_backward_compatibility(self, validation_result, source):
+        # Ensure required fields for frontend compatibility
+        present_columns = validation_result.get('present_columns')
+        required_columns = validation_result.get('required_columns')
+        missing_columns = validation_result.get('missing_columns')
+        is_valid = validation_result.get('valid', False)
+        # If not present, try to infer from issues_detected or errors
+        if 'columns' in validation_result:
+            present_columns = validation_result['columns']
+        elif 'all_columns' in validation_result:
+            present_columns = validation_result['all_columns']
+        elif 'record_count' in validation_result and validation_result['record_count'] > 0:
+            sample_data = validation_result.get('sample_data')
+            if sample_data and isinstance(sample_data, list) and len(sample_data) > 0:
+                present_columns = list(sample_data[0].keys())
+        # Try to get required columns from mapping_manager
+        if not required_columns:
+            mapping = mapping_manager.get_mapping(source)
+            if mapping and hasattr(mapping, 'required_columns'):
+                required_columns = list(mapping.required_columns)
+        # Compute missing columns
+        if present_columns is not None and required_columns is not None:
+            missing_columns = [col for col in required_columns if col not in present_columns]
+            is_valid = len(missing_columns) == 0 and validation_result.get('valid', True)
+        else:
+            missing_columns = []
+        validation_result['present_columns'] = present_columns or []
+        validation_result['required_columns'] = required_columns or []
+        validation_result['missing_columns'] = missing_columns or []
+        validation_result['is_valid'] = is_valid
+        return validation_result 

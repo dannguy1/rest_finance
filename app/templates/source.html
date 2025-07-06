@@ -154,16 +154,23 @@
                         <div class="card-body">
                             <!-- File Selection -->
                             <div class="row mb-4">
-                                <div class="col-md-6">
-                                    <label for="preview-file-select" class="form-label">Select File to Preview</label>
+                                <div class="col-md-8">
+                                    <label for="preview-file-select" class="form-label">
+                                        <i class="bi bi-file-earmark-text me-1"></i>
+                                        Select File to Preview
+                                    </label>
                                     <select class="form-select" id="preview-file-select">
                                         <option value="">Choose a file...</option>
                                     </select>
+                                    <div class="form-text">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        Preview loads automatically when a file is selected
+                                    </div>
                                 </div>
-                                <div class="col-md-6 d-flex align-items-end">
-                                    <button class="btn btn-primary" id="load-preview-btn" disabled>
-                                        <i class="bi bi-eye me-2"></i>
-                                        Load Preview
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <button class="btn btn-outline-secondary btn-sm" id="load-preview-btn" disabled title="Manual load preview">
+                                        <i class="bi bi-arrow-clockwise me-1"></i>
+                                        Reload
                                     </button>
                                 </div>
                             </div>
@@ -313,38 +320,7 @@
     </div>
 </div>
 
-<!-- File Preview Modal -->
-<div class="modal fade" id="filePreviewModal" tabindex="-1" aria-labelledby="filePreviewModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="filePreviewModalLabel">File Preview</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="table-responsive">
-                    <table class="table table-sm" id="preview-table">
-                        <thead>
-                            <tr>
-                                <!-- Headers will be populated dynamically -->
-                            </tr>
-                        </thead>
-                        <tbody id="preview-table-body">
-                            <!-- Data will be populated dynamically -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" id="download-file-btn">
-                    <i class="bi bi-download me-2"></i>
-                    Download
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+
 {% endblock %}
 
 {% block extra_scripts %}

@@ -31,8 +31,9 @@ def get_source_config(source_slug: str) -> dict:
         )
     
     # Convert mapping to legacy format for compatibility
+    # Use source_id directly as directory name (no conversion needed)
     return {
-        "name": mapping.source_id.title().replace("_", ""),
+        "name": mapping.source_id,  # Use source_id directly
         "display_name": mapping.display_name,
         "description": mapping.description,
         "required_columns": mapping.required_columns,
@@ -390,10 +391,14 @@ async def upload_files(
     request: Request,
     files: List[UploadFile] = File(...)
 ):
-    """Upload multiple files for a source with format validation."""
+    """Upload multiple files for a source with enhanced metadata-based validation."""
     try:
         source_config = get_source_config(source)
         source_enum = source_config["name"]
+        
+        # Check if we have saved metadata for this source
+        from app.services.sample_data_service import sample_data_service
+        saved_metadata = sample_data_service.get_processed_data(source)
         
         uploaded_files = []
         for file in files:
@@ -406,21 +411,10 @@ async def upload_files(
                     "error": "Invalid file type. Only CSV files are supported."
                 })
                 continue
-                
-            # Save file
+            
+            # Save file first
             success = await file_service.save_uploaded_file(source_enum, file, file.filename)
-            if success:
-                uploaded_files.append({
-                    "name": file.filename,
-                    "size": file.size,
-                    "status": "uploaded",
-                    "expected_format": {
-                        "required_columns": source_config["required_columns"],
-                        "date_format": source_config["date_format"]
-                    }
-                })
-                processing_logger.log_file_operation("upload", file.filename, source_enum, True)
-            else:
+            if not success:
                 uploaded_files.append({
                     "name": file.filename,
                     "size": file.size,
@@ -428,16 +422,71 @@ async def upload_files(
                     "error": "Failed to save file"
                 })
                 processing_logger.log_file_operation("upload", file.filename, source_enum, False)
+                continue
+            
+            # Perform validation based on available metadata
+            validation_result = None
+            if saved_metadata:
+                # Use metadata-based validation
+                from pathlib import Path
+                file_path = settings.data_path / source_enum / "input" / file.filename
+                validation_result = validation_service.validate_file_against_metadata(file_path, source)
+            else:
+                # Fall back to basic validation
+                from pathlib import Path
+                file_path = settings.data_path / source_enum / "input" / file.filename
+                validation_result = validation_service.validate_csv_file(file_path, source_enum)
+            
+            # Determine upload status based on validation
+            if validation_result['valid']:
+                uploaded_files.append({
+                    "name": file.filename,
+                    "size": file.size,
+                    "status": "uploaded",
+                    "validation": {
+                        "valid": True,
+                        "warnings": validation_result.get('warnings', []),
+                        "metadata_validation": validation_result.get('metadata_validation', {}),
+                        "record_count": validation_result.get('record_count', 0)
+                    },
+                    "expected_format": {
+                        "required_columns": source_config["required_columns"],
+                        "date_format": source_config["date_format"]
+                    }
+                })
+                processing_logger.log_file_operation("upload", file.filename, source_enum, True)
+            else:
+                # File is invalid, but we still saved it - user can review and fix
+                uploaded_files.append({
+                    "name": file.filename,
+                    "size": file.size,
+                    "status": "uploaded_with_errors",
+                    "validation": {
+                        "valid": False,
+                        "errors": validation_result.get('errors', []),
+                        "warnings": validation_result.get('warnings', []),
+                        "metadata_validation": validation_result.get('metadata_validation', {}),
+                        "record_count": validation_result.get('record_count', 0)
+                    },
+                    "expected_format": {
+                        "required_columns": source_config["required_columns"],
+                        "date_format": source_config["date_format"]
+                    }
+                })
+                processing_logger.log_file_operation("upload", file.filename, source_enum, True)
         
-        successful_count = len([f for f in uploaded_files if f['status'] == 'uploaded'])
+        successful_count = len([f for f in uploaded_files if f['status'] in ['uploaded', 'uploaded_with_errors']])
+        valid_count = len([f for f in uploaded_files if f['status'] == 'uploaded'])
         
         return {
-            "message": f"Uploaded {successful_count} files for {source_config['display_name']}",
+            "message": f"Uploaded {successful_count} files for {source_config['display_name']} ({valid_count} valid)",
             "source": source_enum,
             "source_display": source_config["display_name"],
             "files": uploaded_files,
             "total": len(files),
             "successful": successful_count,
+            "valid": valid_count,
+            "has_metadata": saved_metadata is not None,
             "expected_format": {
                 "required_columns": source_config["required_columns"],
                 "date_format": source_config["date_format"],
@@ -537,10 +586,14 @@ async def delete_processed_file(source: str, year: int, month: int, request: Req
 @router.post("/validate/{source}")
 @limiter.limit(settings.rate_limit_api)
 async def validate_uploaded_files(source: str, request: Request):
-    """Validate uploaded files for a specific source with detailed checks."""
+    """Validate uploaded files for a specific source with enhanced metadata-based validation."""
     try:
         source_config = get_source_config(source)
         source_enum = source_config["name"]
+        
+        # Check if we have saved metadata for this source
+        from app.services.sample_data_service import sample_data_service
+        saved_metadata = sample_data_service.get_processed_data(source)
         
         # Get all uploaded files for this source
         files = await file_service.get_source_files(source_enum)
@@ -550,15 +603,24 @@ async def validate_uploaded_files(source: str, request: Request):
             filename = file_info.get('filename')
             if not filename:
                 continue
-                
-            # Perform detailed validation
-            validation_result = await file_service.validate_file(source_enum, filename)
+            
+            # Perform validation based on available metadata
+            validation_result = None
+            if saved_metadata:
+                # Use metadata-based validation
+                from pathlib import Path
+                file_path = settings.data_path / source_enum / "input" / filename
+                validation_result = validation_service.validate_file_against_metadata(file_path, source)
+            else:
+                # Fall back to basic validation
+                validation_result = await file_service.validate_file(source_enum, filename)
             
             validation_results.append({
                 "filename": filename,
                 "size_mb": file_info.get('size_mb', 0),
                 "upload_date": file_info.get('created'),
-                "validation": validation_result
+                "validation": validation_result,
+                "has_metadata_validation": saved_metadata is not None
             })
         
         return {
@@ -570,6 +632,7 @@ async def validate_uploaded_files(source: str, request: Request):
                 "optional_columns": source_config.get("optional_columns", [])
             },
             "files_validated": len(validation_results),
+            "has_metadata": saved_metadata is not None,
             "results": validation_results
         }
         
@@ -584,7 +647,7 @@ async def validate_uploaded_files(source: str, request: Request):
 @router.get("/analyze/{source}/{filename}")
 @limiter.limit(settings.rate_limit_api)
 async def analyze_file(source: str, filename: str, request: Request):
-    """Analyze a specific file with detailed structure information."""
+    """Analyze a specific file with enhanced validation and issue detection."""
     try:
         source_config = get_source_config(source)
         source_enum = source_config["name"]
@@ -598,8 +661,47 @@ async def analyze_file(source: str, filename: str, request: Request):
                 detail=f"File '{filename}' not found for {source_config['display_name']}"
             )
         
-        # Perform detailed analysis
-        analysis = validation_service.analyze_file_structure(file_path, source_enum)
+        # Use enhanced validation service
+        validation_result = validation_service.validate_csv_file(file_path, source_enum)
+        
+        # Debug: Log the validation result
+        processing_logger.log_system_event(
+            f"Validation result for {filename}: {validation_result}", level="info"
+        )
+        processing_logger.log_system_event(
+            f"Issues detected: {validation_result.get('issues_detected', [])}", level="info"
+        )
+        
+        # Get sample data for display
+        import pandas as pd
+        import numpy as np
+        df = pd.read_csv(file_path)
+        file_columns = list(df.columns)
+        
+        # Get sample data (first 5 rows) with proper JSON serialization
+        sample_df = df.head(5)
+        sample_records = []
+        for _, row in sample_df.iterrows():
+            record = {}
+            for col in df.columns:
+                value = row[col]
+                # Handle infinite and NaN values
+                if pd.isna(value):
+                    record[col] = None
+                elif isinstance(value, (int, float)) and (pd.isna(value) or np.isinf(value)):
+                    record[col] = None
+                else:
+                    record[col] = str(value) if not isinstance(value, (int, float, str, bool)) else value
+            sample_records.append(record)
+        
+        analysis = {
+            "source": source_enum,
+            "filename": filename,
+            "file_size_bytes": file_path.stat().st_size,
+            "columns": file_columns,
+            "sample_data": sample_records,
+            "validation": validation_result
+        }
         
         return {
             "filename": filename,
@@ -620,6 +722,64 @@ async def analyze_file(source: str, filename: str, request: Request):
             f"Error analyzing file {filename} for {source}: {str(e)}", level="error"
         )
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+@router.post("/fix/{source}/{filename}")
+@limiter.limit(settings.rate_limit_api)
+async def apply_automatic_fixes(source: str, filename: str, request: Request):
+    """Apply automatic fixes to a file."""
+    try:
+        source_config = get_source_config(source)
+        source_enum = source_config["name"]
+        
+        from pathlib import Path
+        file_path = settings.data_path / source_enum / "input" / filename
+        
+        if not file_path.exists():
+            raise HTTPException(
+                status_code=404, 
+                detail=f"File '{filename}' not found for {source_config['display_name']}"
+            )
+        
+        # Get the validation result to see what issues need fixing
+        validation_result = validation_service.validate_csv_file(file_path, source_enum)
+        
+        # Apply fixes for each detected issue
+        fixes_applied = []
+        issues_detected = validation_result.get('issues_detected', [])
+        
+        for issue in issues_detected:
+            if issue.get('fixable', False):
+                fix_result = validation_service._apply_source_specific_fix(file_path, source_enum, issue)
+                if fix_result['success']:
+                    fixes_applied.append(fix_result['message'])
+                    processing_logger.log_system_event(
+                        f"Applied fix for {issue['type']}: {fix_result['message']}", level="info"
+                    )
+        
+        if fixes_applied:
+            return {
+                "message": "Automatic fixes applied successfully",
+                "filename": filename,
+                "source": source_enum,
+                "source_display": source_config["display_name"],
+                "fixes_applied": fixes_applied
+            }
+        else:
+            return {
+                "message": "No automatic fixes were needed",
+                "filename": filename,
+                "source": source_enum,
+                "source_display": source_config["display_name"],
+                "fixes_applied": []
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        processing_logger.log_system_event(
+            f"Error applying fixes to file {filename} for {source}: {str(e)}", level="error"
+        )
+        raise HTTPException(status_code=500, detail=f"Failed to apply fixes: {str(e)}")
 
 @router.get("/formats/{source}")
 @limiter.limit(settings.rate_limit_api)
