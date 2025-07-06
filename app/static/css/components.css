@@ -1558,6 +1558,10 @@
     min-width: 0 !important;
 }
 
+.processed-files-tree .tree-item .text-muted.small {
+    margin-right: 1.5rem !important;
+}
+
 .processed-files-tree .tree-actions {
     display: flex !important;
     gap: 0.25rem !important;

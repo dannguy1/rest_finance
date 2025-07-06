@@ -350,7 +350,7 @@ class SourceApp {
                     <span class="tree-indent" style="width: 1.5rem; display: inline-block; flex-shrink: 0;"></span>
                     <i class="bi bi-file-earmark-text tree-icon file" style="width: 1.2rem; margin-right: 0.5rem; text-align: center; flex-shrink: 0;"></i>
                     <span class="tree-name" style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: 0.5rem; min-width: 0;">${file.name}</span>
-                    <span class="text-muted small" style="margin-right: 0.5rem;">${this.formatFileSize(file.size)}</span>
+                    <span class="text-muted small" style="margin-right: 1.5rem;">${this.formatFileSize(file.size)}</span>
                     <div class="tree-actions" style="display: flex; gap: 0.25rem; margin-left: auto; flex-shrink: 0; white-space: nowrap;">
                         <button type="button" class="btn btn-outline-primary btn-sm" title="Preview" onclick="sourceApp.previewFile('${file.path}')">
                             <i class="bi bi-eye"></i>
@@ -396,13 +396,17 @@ class SourceApp {
             tab.show();
         }
         
+        // Ensure dropdown is populated and then set the file
+        await this.populatePreviewFileDropdown();
+        
         // Set the file in the preview dropdown and load it
         const previewDropdown = document.getElementById('preview-file-select');
         if (previewDropdown) {
-            // Find the option that matches this file path
+            // Find the option that matches this file path (processed files use "processed:path" format)
+            const targetValue = `processed:${filePath}`;
             for (let option of previewDropdown.options) {
-                if (option.value === filePath) {
-                    previewDropdown.value = filePath;
+                if (option.value === targetValue) {
+                    previewDropdown.value = targetValue;
                     // Trigger the change event to load the preview
                     previewDropdown.dispatchEvent(new Event('change'));
                     break;
@@ -612,25 +616,38 @@ class SourceApp {
 
     async previewUploadedFile(filename) {
         console.log('previewUploadedFile called with:', filename);
-        try {
-            const response = await fetch(`/api/files/preview-uploaded/${this.config.source}?file=${encodeURIComponent(filename)}`);
-            if (response.ok) {
-                const data = await response.json();
-                this.showFilePreview(data);
-            } else {
-                throw new Error('Failed to load file preview');
+        
+        // Switch to Preview tab
+        const previewTab = document.getElementById('preview-tab');
+        if (previewTab) {
+            const tab = new bootstrap.Tab(previewTab);
+            tab.show();
+        }
+        
+        // Ensure dropdown is populated and then set the file
+        await this.populatePreviewFileDropdown();
+        
+        // Set the file in the preview dropdown and load it
+        const previewDropdown = document.getElementById('preview-file-select');
+        if (previewDropdown) {
+            // Find the option that matches this filename (uploaded files use "uploaded:filename" format)
+            const targetValue = `uploaded:${filename}`;
+            for (let option of previewDropdown.options) {
+                if (option.value === targetValue) {
+                    previewDropdown.value = targetValue;
+                    // Trigger the change event to load the preview
+                    previewDropdown.dispatchEvent(new Event('change'));
+                    break;
+                }
             }
-        } catch (error) {
-            this.showAlert('Failed to load file preview: ' + error.message, 'danger');
         }
     }
 
     setupPreviewTab() {
-        // Setup file selection dropdown
+        // Setup file selection dropdown (hidden, used programmatically)
         const fileSelect = document.getElementById('preview-file-select');
-        const loadBtn = document.getElementById('load-preview-btn');
         
-        if (fileSelect && loadBtn) {
+        if (fileSelect) {
             // Auto-load preview when file is selected
             fileSelect.addEventListener('change', () => {
                 if (fileSelect.value) {
@@ -638,22 +655,6 @@ class SourceApp {
                 } else {
                     // Clear preview when no file is selected
                     this.clearPreview();
-                }
-                // Keep button state for backward compatibility
-                loadBtn.disabled = !fileSelect.value;
-            });
-            
-            // Load preview when button is clicked (for manual trigger)
-            loadBtn.addEventListener('click', () => {
-                if (fileSelect.value) {
-                    this.loadFullPreview(fileSelect.value);
-                }
-            });
-            
-            // Load preview when Enter is pressed
-            fileSelect.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter' && fileSelect.value) {
-                    this.loadFullPreview(fileSelect.value);
                 }
             });
         }

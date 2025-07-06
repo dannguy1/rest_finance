@@ -193,28 +193,10 @@
                             </h5>
                         </div>
                         <div class="card-body">
-                            <!-- File Selection -->
-                            <div class="row mb-4">
-                                <div class="col-md-8">
-                                    <label for="preview-file-select" class="form-label">
-                                        <i class="bi bi-file-earmark-text me-1"></i>
-                                        Select File to Preview
-                                    </label>
-                                    <select class="form-select" id="preview-file-select">
-                                        <option value="">Choose a file...</option>
-                                    </select>
-                                    <div class="form-text">
-                                        <i class="bi bi-info-circle me-1"></i>
-                                        Preview loads automatically when a file is selected
-                                    </div>
-                                </div>
-                                <div class="col-md-4 d-flex align-items-end">
-                                    <button class="btn btn-outline-secondary btn-sm" id="load-preview-btn" disabled title="Manual load preview">
-                                        <i class="bi bi-arrow-clockwise me-1"></i>
-                                        Reload
-                                    </button>
-                                </div>
-                            </div>
+                            <!-- Hidden file selection for programmatic use -->
+                            <select class="form-select" id="preview-file-select" style="display: none;">
+                                <option value="">Choose a file...</option>
+                            </select>
 
                             <!-- File Info -->
                             <div class="row mb-3" id="preview-file-info" style="display: none;">
@@ -275,7 +257,7 @@
                             <div class="text-center py-5" id="preview-empty-state">
                                 <i class="bi bi-file-earmark-text fs-1 text-muted mb-3"></i>
                                 <h5 class="text-muted">No file selected</h5>
-                                <p class="text-muted">Select a file from the dropdown above to preview its contents.</p>
+                                <p class="text-muted">Click the Preview button on any file in the Upload Files or Processed Files tabs to view its contents here.</p>
                             </div>
                         </div>
                     </div>
