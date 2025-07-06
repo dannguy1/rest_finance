@@ -454,7 +454,6 @@ class SourceApp {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    group_by_description: true,
                     include_source_file: true
                 })
             });
@@ -491,7 +490,6 @@ class SourceApp {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    group_by_description: true,
                     include_source_file: true
                 })
             });

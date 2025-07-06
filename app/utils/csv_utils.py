@@ -147,8 +147,8 @@ class CSVUtils:
             return 0.0
     
     @staticmethod
-    def group_transactions_by_month(transactions: List[Dict[str, Any]]) -> Dict[str, Dict[str, List[Dict[str, Any]]]]:
-        """Group transactions by month and description."""
+    def group_transactions_by_month(transactions: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """Group transactions by month only (no description grouping)."""
         grouped_data = {}
         
         for transaction in transactions:
@@ -159,15 +159,11 @@ class CSVUtils:
                     continue
                 
                 month_key = f"{date_obj.year}_{date_obj.month:02d}"
-                description = transaction['description']
                 
                 if month_key not in grouped_data:
-                    grouped_data[month_key] = {}
+                    grouped_data[month_key] = []
                 
-                if description not in grouped_data[month_key]:
-                    grouped_data[month_key][description] = []
-                
-                grouped_data[month_key][description].append(transaction)
+                grouped_data[month_key].append(transaction)
                 
             except Exception as e:
                 processing_logger.log_system_event(
@@ -178,32 +174,28 @@ class CSVUtils:
         return grouped_data
     
     @staticmethod
-    def generate_csv_content(month_data: Dict[str, List[Dict[str, Any]]], 
+    def generate_csv_content(month_data: List[Dict[str, Any]], 
                            options: Dict[str, Any]) -> str:
-        """Generate CSV content for a month."""
+        """Generate CSV content for a month without grouping or subtotals."""
         rows = []
         
-        for description, transactions in month_data.items():
-            group_total = sum(t['amount'] for t in transactions)
+        for transaction in month_data:
+            # Start with the basic required fields
+            row = {
+                'Date': transaction['date'],
+                'Description': transaction['description'],
+                'Amount': transaction['amount']
+            }
             
-            for transaction in transactions:
-                # Start with the basic required fields
-                row = {
-                    'Date': transaction['date'],
-                    'Description': description,
-                    'Amount': transaction['amount'],
-                    'Group Total': group_total
-                }
-                
-                # Add all additional fields from the transaction
-                for key, value in transaction.items():
-                    if key not in ['date', 'description', 'amount', 'source_file']:
-                        row[key] = value
-                
-                if options.get('include_source_file', True):
-                    row['Source File'] = transaction['source_file']
-                
-                rows.append(row)
+            # Add all additional fields from the transaction
+            for key, value in transaction.items():
+                if key not in ['date', 'description', 'amount', 'source_file']:
+                    row[key] = value
+            
+            if options.get('include_source_file', True):
+                row['Source File'] = transaction['source_file']
+            
+            rows.append(row)
         
         # Convert to DataFrame and generate CSV
         df = pd.DataFrame(rows)

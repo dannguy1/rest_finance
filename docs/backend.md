@@ -69,7 +69,7 @@ rest_finance/
 
 - Pydantic models for sources, file upload, processing options, results, and status.
 - Enum for source types: BankOfAmerica, Chase, RestaurantDepot, Sysco.
-- Processing options: group by description, include source file, etc.
+- Processing options: include source file, etc.
 - Source mapping models (see `docs/mapping_technical_spec.md` for detailed specifications).
 
 ## API Design
@@ -136,7 +136,7 @@ rest_finance/
 ## Data Processing Engine
 
 - Source-specific parsing and validation (Bank of America, Chase, Restaurant Depot, Sysco)
-- Grouping by month and description
+- Grouping by month only
 - Output CSV generation by year/month
 - Per-file and batch processing supported
 - File validation and error handling

@@ -87,7 +87,7 @@ class DataProcessor:
                     error_message=f"No valid data found in files for {source}"
                 )
             
-            # 3. Group by month and description
+            # 3. Group by month only
             grouped_data = CSVUtils.group_transactions_by_month(parsed_data)
             
             # 4. Generate monthly CSV files for all years found in the data
@@ -335,7 +335,7 @@ class DataProcessor:
         
         return all_transactions
     
-    async def _generate_monthly_files(self, source: str, year: int, grouped_data: Dict[str, Dict[str, List[Dict[str, Any]]]], 
+    async def _generate_monthly_files(self, source: str, year: int, grouped_data: Dict[str, List[Dict[str, Any]]], 
                                     options: ProcessingOptions) -> List[str]:
         """Generate monthly CSV files."""
         output_files = []
@@ -350,7 +350,7 @@ class DataProcessor:
             FileUtils.ensure_directory(output_dir)
             
             # Generate CSV content
-            csv_content = CSVUtils.generate_csv_content(month_data, options.dict())
+            csv_content = CSVUtils.generate_csv_content(month_data, options.model_dump())
             
             # Write to file
             output_file = output_dir / f"{month_part}_{year}.csv"
@@ -443,7 +443,7 @@ class DataProcessor:
                 processing_logger.log_system_event(
                     f"[DEBUG] No transactions parsed from {filename}", level="warning"
                 )
-            # 3. Group by month and description
+            # 3. Group by month only
             grouped_data = CSVUtils.group_transactions_by_month(parsed_data)
             processing_logger.log_system_event(
                 f"[DEBUG] Grouping keys: {list(grouped_data.keys())}", level="info"

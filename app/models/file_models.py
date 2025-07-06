@@ -19,7 +19,6 @@ class ProcessingOptions(BaseModel):
     """Options for data processing."""
     date_format: Optional[str] = Field(default="MM/DD/YYYY", description="Date format for parsing")
     currency_format: Optional[str] = Field(default="USD", description="Currency format")
-    group_by_description: bool = Field(default=True, description="Group transactions by description")
     include_source_file: bool = Field(default=True, description="Include source file in output")
 
 
@@ -57,7 +56,6 @@ class TransactionRecord(BaseModel):
     date: str = Field(..., description="Transaction date")
     description: str = Field(..., description="Transaction description")
     amount: float = Field(..., description="Transaction amount")
-    group_total: float = Field(..., description="Total for this description group")
     source_file: str = Field(..., description="Source file name")
 
 

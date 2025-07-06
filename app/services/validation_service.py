@@ -740,14 +740,6 @@ class ValidationService:
         """Validate processing options."""
         errors = []
         
-        # Validate group_by option
-        if 'group_by' in options:
-            group_by = options['group_by']
-            if not isinstance(group_by, str):
-                errors.append("group_by must be a string")
-            elif group_by not in ['description', 'date', 'none']:
-                errors.append("group_by must be 'description', 'date', or 'none'")
-        
         # Validate include_source_file option
         if 'include_source_file' in options:
             include_source_file = options['include_source_file']

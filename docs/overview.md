@@ -131,10 +131,10 @@ Each data source follows the structure:
 Example:
 ```
 BankOfAmerica/output/2024/01_2024.csv
-├── Date, Description, Amount, Group Total, Source File
-├── 01/15/2024, VERIZON WIRELESS, -421.50, -421.50, boa_statement_2024.csv
-├── 01/20/2024, VERIZON WIRELESS, -301.93, -723.43, boa_statement_2024.csv
-└── 01/25/2024, GROCERY STORE, -45.67, -45.67, boa_statement_2024.csv
+├── Date, Description, Amount, Source File
+├── 01/15/2024, VERIZON WIRELESS, -421.50, boa_statement_2024.csv
+├── 01/20/2024, VERIZON WIRELESS, -301.93, boa_statement_2024.csv
+└── 01/25/2024, GROCERY STORE, -45.67, boa_statement_2024.csv
 ```
 
 ## Development Phases
