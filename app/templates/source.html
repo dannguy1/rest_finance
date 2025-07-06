@@ -24,16 +24,16 @@
         <div class="col-12">
             <ul class="nav nav-tabs" id="sourceTabs" role="tablist">
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload-pane" type="button" role="tab" aria-controls="upload-pane" aria-selected="true">
-                        <i class="bi bi-cloud-upload me-2"></i>
-                        Upload Files
+                    <button class="nav-link active" id="files-tab" data-bs-toggle="tab" data-bs-target="#files-pane" type="button" role="tab" aria-controls="files-pane" aria-selected="true">
+                        <i class="bi bi-folder me-2"></i>
+                        Processed Files
                     </button>
                 </li>
 
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="files-tab" data-bs-toggle="tab" data-bs-target="#files-pane" type="button" role="tab" aria-controls="files-pane" aria-selected="false">
-                        <i class="bi bi-folder me-2"></i>
-                        Processed Files
+                    <button class="nav-link" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload-pane" type="button" role="tab" aria-controls="upload-pane" aria-selected="false">
+                        <i class="bi bi-cloud-upload me-2"></i>
+                        Upload Files
                     </button>
                 </li>
 
@@ -49,8 +49,49 @@
 
     <!-- Tab Content -->
     <div class="tab-content" id="sourceTabsContent">
+        <!-- Processed Files Tab -->
+        <div class="tab-pane fade show active" id="files-pane" role="tabpanel" aria-labelledby="files-tab" tabindex="0">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="bi bi-folder me-2"></i>
+                                Processed Files
+                            </h5>
+                            <button class="btn btn-sm btn-outline-light" id="refresh-files-btn">
+                                <i class="bi bi-arrow-clockwise me-1"></i>
+                                Refresh
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <!-- Tree View Container -->
+                            <div class="processed-files-tree" id="processed-files-tree">
+                                <!-- Tree structure will be populated dynamically -->
+                            </div>
+
+                            <!-- Empty State -->
+                            <div class="text-center py-5" id="empty-state" style="display: none;">
+                                <i class="bi bi-folder-x fs-1 text-muted mb-3"></i>
+                                <h5 class="text-muted">No processed files found</h5>
+                                <p class="text-muted">Upload and process some files to see them here.</p>
+                            </div>
+
+                            <!-- Loading State -->
+                            <div class="text-center py-5" id="files-loading" style="display: none;">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2 text-muted">Loading processed files...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Upload Files Tab -->
-        <div class="tab-pane fade show active" id="upload-pane" role="tabpanel" aria-labelledby="upload-tab" tabindex="0">
+        <div class="tab-pane fade" id="upload-pane" role="tabpanel" aria-labelledby="upload-tab" tabindex="0">
             <div class="row">
                 <div class="col-12">
                     <div class="card border-0 shadow-sm">
@@ -133,47 +174,6 @@
                                         <!-- Validation results will be populated here -->
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Processed Files Tab -->
-        <div class="tab-pane fade" id="files-pane" role="tabpanel" aria-labelledby="files-tab" tabindex="0">
-            <div class="row">
-                <div class="col-12">
-                    <div class="card border-0 shadow-sm">
-                        <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">
-                                <i class="bi bi-folder me-2"></i>
-                                Processed Files
-                            </h5>
-                            <button class="btn btn-sm btn-outline-light" id="refresh-files-btn">
-                                <i class="bi bi-arrow-clockwise me-1"></i>
-                                Refresh
-                            </button>
-                        </div>
-                        <div class="card-body">
-                            <!-- Tree View Container -->
-                            <div class="processed-files-tree" id="processed-files-tree">
-                                <!-- Tree structure will be populated dynamically -->
-                            </div>
-
-                            <!-- Empty State -->
-                            <div class="text-center py-5" id="empty-state" style="display: none;">
-                                <i class="bi bi-folder-x fs-1 text-muted mb-3"></i>
-                                <h5 class="text-muted">No processed files found</h5>
-                                <p class="text-muted">Upload and process some files to see them here.</p>
-                            </div>
-
-                            <!-- Loading State -->
-                            <div class="text-center py-5" id="files-loading" style="display: none;">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <p class="mt-2 text-muted">Loading processed files...</p>
                             </div>
                         </div>
                     </div>

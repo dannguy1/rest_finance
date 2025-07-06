@@ -1477,6 +1477,5 @@ class SourceApp {
 let sourceApp;
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM Content Loaded - initializing SourceApp');
-    alert('SourceApp is loading!');
     sourceApp = new SourceApp();
 }); 
