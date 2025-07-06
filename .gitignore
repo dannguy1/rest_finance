@@ -163,8 +163,8 @@ simple_test.py
 manual_test.py
 
 # Documentation files (temporary)
-*.md
-!README.md
+# *.md
+# !README.md
 
 # Benchmark results
 .benchmarks/

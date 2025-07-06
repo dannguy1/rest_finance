@@ -1080,17 +1080,20 @@ class SourceApp {
 
     async analyzeFile(filename) {
         try {
+            console.log('analyzeFile called with filename:', filename);
             this.showAlert('Analyzing file...', 'info');
             
             const response = await fetch(`/api/files/analyze/${this.config.source}/${encodeURIComponent(filename)}`);
             
             if (response.ok) {
                 const result = await response.json();
+                console.log('Analysis result received:', result);
                 this.displayFileAnalysis(result);
             } else {
                 throw new Error('File analysis failed');
             }
         } catch (error) {
+            console.error('Error in analyzeFile:', error);
             this.showAlert('File analysis failed: ' + error.message, 'danger');
         }
     }
@@ -1233,8 +1236,12 @@ class SourceApp {
                                     
                                     <!-- Fix Permission Prompt -->
                                     ${(() => {
+                                        console.log('Building fix permission prompt...');
                                         const fixableIssues = analysis.validation.issues_detected.filter(issue => issue.fixable);
                                         const unfixableIssues = analysis.validation.issues_detected.filter(issue => !issue.fixable);
+                                        
+                                        console.log('Fixable issues:', fixableIssues.length);
+                                        console.log('Unfixable issues:', unfixableIssues.length);
                                         
                                         let promptHtml = '';
                                         

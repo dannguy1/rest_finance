@@ -12,6 +12,8 @@ from app.utils.csv_utils import CSVUtils
 from app.services.sample_data_service import SampleDataService
 from datetime import datetime
 from app.config.source_mapping import mapping_manager
+import csv
+import os
 
 
 class ValidationService:
@@ -76,12 +78,12 @@ class ValidationService:
                 )
                 validation_result['issues_detected'].extend(source_issues)
             except Exception as e:
-                # If source-specific detection fails, add a generic issue
+                # If source-specific detection fails, add a fixable issue
                 generic_issue = {
-                    'type': 'parsing_error',
-                    'message': f'Error detecting source-specific issues: {str(e)}',
-                    'fixable': False,
-                    'suggestion': 'Check if the file format is correct for this source'
+                    'type': 'csv_formatting',
+                    'message': f'CSV formatting issue: {str(e)}',
+                    'fixable': True,
+                    'suggestion': 'Fix CSV formatting issues automatically'
                 }
                 validation_result['issues_detected'].append(generic_issue)
                 source_issues.append(generic_issue)
@@ -90,22 +92,21 @@ class ValidationService:
             fixable_issues = [issue for issue in source_issues if issue.get('fixable', False)]
             unfixable_issues = [issue for issue in source_issues if not issue.get('fixable', False)]
             
+            # Set user action required if there are any issues that need user permission
+            if fixable_issues:
+                validation_result['user_action_required'] = True
+                validation_result['can_proceed'] = False
+                # Don't apply fixes automatically - let user decide
+                for issue in fixable_issues:
+                    validation_result['warnings'].append(f"Fixable issue detected: {issue['message']}")
+                    validation_result['fix_suggestions'].append(issue.get('suggestion', ''))
+            
             if unfixable_issues:
                 validation_result['user_action_required'] = True
                 validation_result['can_proceed'] = False
                 for issue in unfixable_issues:
                     validation_result['errors'].append(issue['message'])
                     validation_result['fix_suggestions'].append(issue.get('suggestion', ''))
-            
-            # Apply automatic fixes if possible
-            if fixable_issues:
-                for issue in fixable_issues:
-                    if issue.get('auto_fix'):
-                        fix_result = self._apply_source_specific_fix(file_path, source, issue)
-                        if fix_result['success']:
-                            validation_result['fixes_applied'].append(fix_result['message'])
-                        else:
-                            validation_result['warnings'].append(f"Could not automatically fix: {issue['message']}")
             
             # CSV structure validation
             is_valid, structure_errors = CSVUtils.validate_csv_structure(file_path, source)
@@ -116,7 +117,8 @@ class ValidationService:
             
             # Read CSV for further validation
             try:
-                df = pd.read_csv(file_path)
+                # Use more robust CSV reading to handle mixed data types
+                df = pd.read_csv(file_path, dtype=str, na_filter=False)
                 validation_result['record_count'] = len(df)
             except Exception as e:
                 validation_result['errors'].append(f"CSV parsing error: {str(e)}")
@@ -180,6 +182,15 @@ class ValidationService:
         
         # Add backward compatibility for frontend
         validation_result = self._add_backward_compatibility(validation_result, source)
+        
+        # Debug logging for validation result
+        processing_logger.log_system_event(
+            f"Final validation result for {source}: issues_detected={len(validation_result.get('issues_detected', []))}, "
+            f"user_action_required={validation_result.get('user_action_required', False)}, "
+            f"can_proceed={validation_result.get('can_proceed', True)}", 
+            level="info"
+        )
+        
         return validation_result
     
     def validate_file_against_metadata(self, file_path: Path, source_id: str) -> Dict[str, Any]:
@@ -221,7 +232,7 @@ class ValidationService:
             validation_result['metadata_validation']['has_saved_metadata'] = True
             
             # Read the uploaded file
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path, dtype=str, na_filter=False)
             validation_result['record_count'] = len(df)
             
             # Validate against saved metadata
@@ -773,8 +784,8 @@ class ValidationService:
         }
         
         try:
-            # Read CSV file
-            df = pd.read_csv(file_path)
+            # Read CSV file with robust parsing
+            df = pd.read_csv(file_path, dtype=str, na_filter=False)
             analysis['columns'] = list(df.columns)
             
             # Get sample data (first 5 rows) with proper JSON serialization
@@ -989,7 +1000,7 @@ class ValidationService:
         issues = []
         
         try:
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path, dtype=str, na_filter=False)
             
             # Map source to proper case
             source_mapping = {
@@ -1010,11 +1021,13 @@ class ValidationService:
                 issues.extend(self._detect_sysco_issues(df))
                 
         except Exception as e:
+            # Make parsing errors fixable so user can decide
+            error_msg = str(e)
             issues.append({
-                'type': 'parsing_error',
-                'message': f"Error reading CSV file: {str(e)}",
-                'fixable': False,
-                'suggestion': 'Check if the file is a valid CSV format'
+                'type': 'csv_formatting',
+                'message': f"CSV formatting issue: {error_msg}",
+                'fixable': True,
+                'suggestion': 'Fix CSV formatting issues automatically'
             })
         
         return issues
@@ -1034,6 +1047,7 @@ class ValidationService:
             processing_logger.log_system_event(
                 f"Sample Description value: {sample_desc[:100]}... (length: {len(str(sample_desc))})", level="info"
             )
+            # Only detect if there's a real problem with very long descriptions
             if isinstance(sample_desc, str) and len(sample_desc) > 200:
                 issues.append({
                     'type': 'column_misalignment',
@@ -1047,6 +1061,7 @@ class ValidationService:
             for col in df.columns:
                 if len(df) > 0:
                     sample_value = df[col].iloc[0]
+                    # Only detect if there's a real problem with very long values
                     if isinstance(sample_value, str) and len(sample_value) > 200:
                         issues.append({
                             'type': 'column_misalignment',
@@ -1056,6 +1071,9 @@ class ValidationService:
                             'details': f'{col} length: {len(sample_value)} characters'
                         })
                         break
+        
+        # Only add Chase optimization if there are actual issues detected
+        # (Removed artificial issue to make validation more flexible)
         
         return issues
     
@@ -1113,16 +1131,18 @@ class ValidationService:
         """Apply source-specific fixes for detected issues."""
         try:
             if issue['type'] == 'csv_formatting':
-                # This is already handled by _fix_csv_formatting
-                return {
-                    'success': True,
-                    'message': 'CSV formatting issues fixed'
-                }
+                # Fix CSV formatting issues by cleaning up inconsistent rows/columns and empty values
+                return self._fix_csv_formatting_issues(file_path, issue)
             
             elif issue['type'] == 'column_misalignment':
                 # For Chase files with complex transaction data, we can parse and restructure
                 if source.lower() == 'chase':
                     return self._fix_chase_column_misalignment(file_path, issue)
+            
+            elif issue['type'] == 'chase_optimization':
+                # For Chase files, apply general optimization
+                if source.lower() == 'chase':
+                    return self._fix_chase_optimization(file_path, issue)
             
             # Add more source-specific fixes here as needed
             return {
@@ -1143,7 +1163,7 @@ class ValidationService:
             import re
             
             # Read the original file
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path, dtype=str, na_filter=False)
             
             # Create a backup
             backup_path = file_path.with_suffix('.csv.backup')
@@ -1196,12 +1216,186 @@ class ValidationService:
                 'message': f'Error fixing Chase column misalignment: {str(e)}'
             }
     
+    def _fix_chase_optimization(self, file_path: Path, issue: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply general Chase file optimization."""
+        try:
+            import pandas as pd
+            import re
+            
+            # Read the original file
+            df = pd.read_csv(file_path, dtype=str, na_filter=False)
+            
+            # Create a backup
+            backup_path = file_path.with_suffix('.csv.backup')
+            df.to_csv(backup_path, index=False)
+            
+            # Apply general optimizations
+            optimizations_applied = []
+            
+            # Clean up any excessively long descriptions
+            if 'Description' in df.columns:
+                def clean_description(desc):
+                    if pd.isna(desc) or not isinstance(desc, str):
+                        return desc
+                    # Remove extra whitespace and limit length
+                    cleaned = re.sub(r'\s+', ' ', desc.strip())
+                    return cleaned[:200] if len(cleaned) > 200 else cleaned
+                
+                df['Description'] = df['Description'].apply(clean_description)
+                optimizations_applied.append('Cleaned and optimized Description column')
+            
+            # Ensure amount column is properly formatted
+            if 'Amount' in df.columns:
+                def clean_amount(amount):
+                    if pd.isna(amount):
+                        return amount
+                    # Remove any non-numeric characters except decimal point and minus
+                    if isinstance(amount, str):
+                        cleaned = re.sub(r'[^\d.-]', '', amount)
+                        try:
+                            return float(cleaned)
+                        except ValueError:
+                            return amount
+                    return amount
+                
+                df['Amount'] = df['Amount'].apply(clean_amount)
+                optimizations_applied.append('Cleaned Amount column format')
+            
+            # Save the optimized file
+            df.to_csv(file_path, index=False)
+            
+            processing_logger.log_system_event(
+                f"Applied Chase optimizations to {file_path.name}", level="info"
+            )
+            
+            return {
+                'success': True,
+                'message': f'Chase file optimized: {", ".join(optimizations_applied)}',
+                'backup_created': str(backup_path)
+            }
+            
+        except Exception as e:
+            processing_logger.log_system_event(
+                f"Error applying Chase optimization: {str(e)}", level="error"
+            )
+            return {
+                'success': False,
+                'message': f'Error applying Chase optimization: {str(e)}'
+            }
+    
+    def _fix_csv_formatting_issues(self, file_path: Path, issue: Dict[str, Any]) -> Dict[str, Any]:
+        """Fix CSV formatting issues by cleaning up inconsistent rows/columns and empty values."""
+        try:
+            # Read the file line by line
+            with open(file_path, 'r', newline='', encoding='utf-8') as f:
+                reader = list(csv.reader(f))
+
+            if not reader:
+                processing_logger.log_system_event(f"CSV file {file_path.name} is empty.", level="warning")
+                return {'success': False, 'message': 'CSV file is empty'}
+
+            header = reader[0]
+            original_row_count = len(reader)
+            
+            # Special handling for Chase files with column misalignment
+            if 'Details' in header and 'Posting Date' in header and 'Description' in header:
+                # This is likely a Chase file - fix the column misalignment
+                processing_logger.log_system_event(
+                    f"[CSV FIX] {file_path.name}: Detected Chase file with column misalignment", level="info"
+                )
+                
+                # Expected Chase header: Details, Posting Date, Description, Amount, Type, Balance, Check or Slip #
+                expected_header = ['Details', 'Posting Date', 'Description', 'Amount', 'Type', 'Balance', 'Check or Slip #']
+                
+                # Create the correct header
+                cleaned_header = expected_header
+                cleaned_rows = [cleaned_header]
+                
+                # Process each data row
+                for row in reader[1:]:
+                    if not any(cell.strip() for cell in row):
+                        continue
+                    
+                    # Ensure row has the correct number of columns
+                    if len(row) < len(expected_header):
+                        row = row + [''] * (len(expected_header) - len(row))
+                    elif len(row) > len(expected_header):
+                        row = row[:len(expected_header)]
+                    
+                    cleaned_rows.append(row)
+                
+                processing_logger.log_system_event(
+                    f"[CSV FIX] {file_path.name}: Chase file fixed - Original rows={original_row_count}, After clean={len(cleaned_rows)}.", level="info"
+                )
+                processing_logger.log_system_event(
+                    f"[CSV FIX] {file_path.name}: New header: {cleaned_header}", level="info"
+                )
+                if len(cleaned_rows) > 1:
+                    processing_logger.log_system_event(
+                        f"[CSV FIX] {file_path.name}: Sample fixed row: {cleaned_rows[1]}", level="info"
+                    )
+            else:
+                # Generic CSV fixing for other file types
+                n_cols = len(header)
+                cleaned_rows = [header]
+                fixed_row_count = 0
+
+                # Clean each row: pad or trim to header length, skip empty rows
+                for row in reader[1:]:
+                    # Remove completely empty rows
+                    if not any(cell.strip() for cell in row):
+                        continue
+                    # Pad or trim row
+                    if len(row) < n_cols:
+                        row = row + [''] * (n_cols - len(row))
+                    elif len(row) > n_cols:
+                        row = row[:n_cols]
+                    cleaned_rows.append(row)
+                    fixed_row_count += 1
+
+                # Remove completely empty columns
+                # Transpose, filter, then transpose back
+                transposed = list(zip(*cleaned_rows))
+                non_empty_cols = [col for col in transposed if any(cell.strip() for cell in col[1:])]
+                cleaned_rows = list(map(list, zip(*non_empty_cols))) if non_empty_cols else [header]
+
+                processing_logger.log_system_event(
+                    f"[CSV FIX] {file_path.name}: Generic fix - Original rows={original_row_count}, After clean={len(cleaned_rows)}.", level="info"
+                )
+
+            # Create a backup
+            backup_path = file_path.with_suffix('.csv.backup')
+            os.rename(file_path, backup_path)
+
+            # Write cleaned CSV
+            with open(file_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerows(cleaned_rows)
+
+            processing_logger.log_system_event(
+                f"Fixed CSV formatting issues in {file_path.name}", level="info"
+            )
+            return {
+                'success': True,
+                'message': 'CSV formatting issues fixed',
+                'backup_created': str(backup_path)
+            }
+        except Exception as e:
+            processing_logger.log_system_event(
+                f"Error fixing CSV formatting issues: {str(e)}", level="error"
+            )
+            return {
+                'success': False,
+                'message': f'Error fixing CSV formatting issues: {str(e)}'
+            }
+    
     def _add_backward_compatibility(self, validation_result, source):
         # Ensure required fields for frontend compatibility
         present_columns = validation_result.get('present_columns')
         required_columns = validation_result.get('required_columns')
         missing_columns = validation_result.get('missing_columns')
         is_valid = validation_result.get('valid', False)
+        
         # If not present, try to infer from issues_detected or errors
         if 'columns' in validation_result:
             present_columns = validation_result['columns']
@@ -1211,19 +1405,34 @@ class ValidationService:
             sample_data = validation_result.get('sample_data')
             if sample_data and isinstance(sample_data, list) and len(sample_data) > 0:
                 present_columns = list(sample_data[0].keys())
+        
         # Try to get required columns from mapping_manager
         if not required_columns:
             mapping = mapping_manager.get_mapping(source)
             if mapping and hasattr(mapping, 'required_columns'):
                 required_columns = list(mapping.required_columns)
+        
         # Compute missing columns
         if present_columns is not None and required_columns is not None:
             missing_columns = [col for col in required_columns if col not in present_columns]
             is_valid = len(missing_columns) == 0 and validation_result.get('valid', True)
         else:
             missing_columns = []
+        
+        # Ensure issues_detected is always an array for frontend compatibility
+        if 'issues_detected' not in validation_result:
+            validation_result['issues_detected'] = []
+        
+        # Ensure user_action_required is set if there are fixable issues
+        if validation_result.get('issues_detected'):
+            fixable_issues = [issue for issue in validation_result['issues_detected'] if issue.get('fixable', False)]
+            if fixable_issues:
+                validation_result['user_action_required'] = True
+                validation_result['can_proceed'] = False
+        
         validation_result['present_columns'] = present_columns or []
         validation_result['required_columns'] = required_columns or []
         validation_result['missing_columns'] = missing_columns or []
         validation_result['is_valid'] = is_valid
+        
         return validation_result 

@@ -330,15 +330,16 @@ async def get_available_months(source: str, year: int, request: Request):
             }
         
         months = []
-        for csv_file in year_dir.glob("*.csv"):
-            # Extract month from filename (e.g., "01_2023.csv" -> 1)
-            try:
-                month_str = csv_file.stem.split("_")[0]
-                month = int(month_str)
-                if 1 <= month <= 12:
-                    months.append(month)
-            except (ValueError, IndexError):
-                continue
+        for csv_file in year_dir.iterdir():
+            if csv_file.is_file() and csv_file.suffix.lower() == '.csv':
+                # Extract month from filename (e.g., "01_2023.csv" -> 1)
+                try:
+                    month_str = csv_file.stem.split("_")[0]
+                    month = int(month_str)
+                    if 1 <= month <= 12:
+                        months.append(month)
+                except (ValueError, IndexError):
+                    continue
         
         months.sort()
         

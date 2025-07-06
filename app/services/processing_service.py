@@ -14,6 +14,7 @@ from app.utils.csv_utils import CSVUtils
 from app.models.file_models import ProcessingOptions, ProcessingResult
 from dataclasses import dataclass
 from app.config.source_mapping import mapping_manager
+from app.utils.csv_loader import load_csv_robust
 
 
 @dataclass
@@ -134,7 +135,8 @@ class DataProcessor:
         if not source_dir.exists():
             return []
         
-        return list(source_dir.glob("*.csv"))
+        # Use case-insensitive file detection for CSV files
+        return [f for f in source_dir.iterdir() if f.is_file() and f.suffix.lower() == '.csv']
     
     async def _parse_files(self, files: List[Path], source: str) -> List[Dict[str, Any]]:
         """Parse files based on source type using configuration."""
@@ -168,7 +170,8 @@ class DataProcessor:
         
         for file_path in files:
             try:
-                df = pd.read_csv(file_path)
+                # Use robust CSV parsing to handle mixed data types
+                df = pd.read_csv(file_path, dtype=str, na_filter=False)
                 
                 # Validate required columns
                 required_columns = ['Status', 'Date', 'Original Description', 'Amount']
@@ -202,7 +205,8 @@ class DataProcessor:
         
         for file_path in files:
             try:
-                df = pd.read_csv(file_path)
+                # Use robust CSV parsing to handle mixed data types
+                df = pd.read_csv(file_path, dtype=str, na_filter=False)
                 
                 # Chase files use 'Posting Date', 'Description', 'Amount'
                 # Check for the actual column names in Chase files
@@ -249,7 +253,8 @@ class DataProcessor:
         
         for file_path in files:
             try:
-                df = pd.read_csv(file_path)
+                # Use robust CSV parsing to handle mixed data types
+                df = pd.read_csv(file_path, dtype=str, na_filter=False)
                 
                 # Extract invoice number and date from header
                 invoice_number = file_path.stem  # Use filename as invoice number
@@ -293,7 +298,8 @@ class DataProcessor:
         
         for file_path in files:
             try:
-                df = pd.read_csv(file_path)
+                # Use robust CSV parsing to handle mixed data types
+                df = pd.read_csv(file_path, dtype=str, na_filter=False)
                 
                 # Extract invoice number and date from header
                 invoice_number = file_path.stem  # Use filename as invoice number
@@ -381,12 +387,13 @@ class DataProcessor:
             total_records = 0
             total_amount = 0.0
             
-            for csv_file in output_dir.glob("*.csv"):
-                total_files += 1
-                df = pd.read_csv(csv_file)
-                total_records += len(df)
-                if 'Amount' in df.columns:
-                    total_amount += df['Amount'].sum()
+            for csv_file in output_dir.iterdir():
+                if csv_file.is_file() and csv_file.suffix.lower() == '.csv':
+                    total_files += 1
+                    df = pd.read_csv(csv_file)
+                    total_records += len(df)
+                    if 'Amount' in df.columns:
+                        total_amount += df['Amount'].sum()
             
             return {
                 "total_files": total_files,
@@ -425,44 +432,42 @@ class DataProcessor:
             
             # 2. Parse the specific file
             parsed_data = await self._parse_single_file(file_path, source)
-            if not parsed_data:
-                return ProcessingResult(
-                    success=False,
-                    files_processed=0,
-                    output_files=[],
-                    processing_time=0.0,
-                    error_message=f"No valid data found in {filename}"
+            processing_logger.log_system_event(
+                f"[DEBUG] Parsed {len(parsed_data)} transactions from {filename}", level="info"
+            )
+            if parsed_data:
+                processing_logger.log_system_event(
+                    f"[DEBUG] Sample transaction: {parsed_data[0]}", level="info"
                 )
-            
+            else:
+                processing_logger.log_system_event(
+                    f"[DEBUG] No transactions parsed from {filename}", level="warning"
+                )
             # 3. Group by month and description
             grouped_data = CSVUtils.group_transactions_by_month(parsed_data)
-            
+            processing_logger.log_system_event(
+                f"[DEBUG] Grouping keys: {list(grouped_data.keys())}", level="info"
+            )
             # 4. Generate monthly CSV files for all years found in the data
             output_files = []
             for month_key in grouped_data.keys():
                 year_part, month_part = month_key.split('_')
                 year = int(year_part)
-                
                 # Generate files for this year
                 year_output_files = await self._generate_monthly_files(source, year, {month_key: grouped_data[month_key]}, options)
                 output_files.extend(year_output_files)
-                
                 # Update metadata for this year
                 await self._update_processing_history(source, year, year_output_files)
-            
             processing_time = (datetime.now() - start_time).total_seconds()
-            
             processing_logger.log_processing_job(
                 "system", source, "completed", 100.0, f"Processing completed for {source} file {filename}"
             )
-            
             return ProcessingResult(
                 success=True,
                 files_processed=1,
                 output_files=output_files,
                 processing_time=processing_time
             )
-            
         except Exception as e:
             processing_logger.log_processing_job(
                 "system", source, "error", 0.0, f"Processing failed for {source} file {filename}: {str(e)}"
@@ -507,27 +512,56 @@ class DataProcessor:
         return await self._parse_with_config(file_path, mapping)
 
     async def _parse_with_config(self, file_path: Path, mapping) -> List[Dict[str, Any]]:
-        """Parse a file using source mapping configuration."""
+        """Parse a file using source mapping configuration with robust CSV loading."""
         transactions = []
         
         try:
-            df = pd.read_csv(file_path)
+            # Convert mapping to metadata dict for robust CSV loader
+            metadata = {
+                'required_columns': mapping.required_columns,
+                'header_match': getattr(mapping, 'header_match', None),
+                'min_row_fields': getattr(mapping, 'min_row_fields', None),
+                'encoding': getattr(mapping, 'encoding', None)
+            }
+            
+            # Use robust CSV loader with metadata
+            df = load_csv_robust(
+                file_path, 
+                metadata=metadata,
+                logger_instance=processing_logger
+            )
+            
+            # Log the actual columns found for debugging
+            processing_logger.log_system_event(
+                f"[DEBUG] CSV columns in {file_path.name}: {list(df.columns)}"
+            )
+            
+            # Log the first few rows for debugging
+            if len(df) > 0:
+                first_row = df.iloc[0]
+                processing_logger.log_system_event(
+                    f"[DEBUG] First row data: {dict(first_row)}"
+                )
             
             # Validate required columns
             required_columns = mapping.required_columns
             if not all(col in df.columns for col in required_columns):
                 raise ValueError(f"Missing required columns in {file_path.name}. Expected: {required_columns}, Found: {list(df.columns)}")
             
-            for _, row in df.iterrows():
+            for idx, row in df.iterrows():
                 try:
                     transaction = {
                         'source_file': file_path.name
                     }
                     
-                    # Map required columns
-                    transaction[mapping.date_mapping.target_field] = str(row[mapping.date_mapping.source_column])
-                    transaction[mapping.description_mapping.target_field] = str(row[mapping.description_mapping.source_column])
-                    transaction[mapping.amount_mapping.target_field] = CSVUtils.clean_amount(row[mapping.amount_mapping.source_column])
+                    # Map required columns with detailed logging
+                    date_value = str(row[mapping.date_mapping.source_column])
+                    description_value = str(row[mapping.description_mapping.source_column])
+                    amount_value = CSVUtils.clean_amount(row[mapping.amount_mapping.source_column])
+                    
+                    transaction[mapping.date_mapping.target_field] = date_value
+                    transaction[mapping.description_mapping.target_field] = description_value
+                    transaction[mapping.amount_mapping.target_field] = amount_value
                     
                     # Map optional columns if they exist in the data
                     for opt_mapping in mapping.optional_mappings:
@@ -539,10 +573,16 @@ class DataProcessor:
                             else:
                                 transaction[opt_mapping.target_field] = str(value)
                     
+                    # Log the first transaction for debugging
+                    if idx == 0:
+                        processing_logger.log_system_event(
+                            f"[DEBUG] First transaction: {transaction}"
+                        )
+                    
                     transactions.append(transaction)
                 except Exception as e:
                     processing_logger.log_system_event(
-                        f"Error parsing row in {file_path.name}: {str(e)}", level="warning"
+                        f"Error parsing row {idx} in {file_path.name}: {str(e)}", level="warning"
                     )
                     continue
                     
@@ -557,7 +597,8 @@ class DataProcessor:
         transactions = []
         
         try:
-            df = pd.read_csv(file_path)
+            # Use robust CSV parsing to handle mixed data types
+            df = pd.read_csv(file_path, dtype=str, na_filter=False)
             
             # Validate required columns
             required_columns = ['Status', 'Date', 'Original Description', 'Amount']
@@ -590,7 +631,8 @@ class DataProcessor:
         transactions = []
         
         try:
-            df = pd.read_csv(file_path)
+            # Use robust CSV parsing to handle mixed data types
+            df = pd.read_csv(file_path, dtype=str, na_filter=False)
             
             # Chase files have malformed data where the actual transaction data
             # is in the "Description" column instead of "Posting Date"
@@ -665,7 +707,8 @@ class DataProcessor:
         transactions = []
         
         try:
-            df = pd.read_csv(file_path)
+            # Use robust CSV parsing to handle mixed data types
+            df = pd.read_csv(file_path, dtype=str, na_filter=False)
             
             # Extract invoice number and date from header
             invoice_number = file_path.stem  # Use filename as invoice number
@@ -708,7 +751,8 @@ class DataProcessor:
         transactions = []
         
         try:
-            df = pd.read_csv(file_path)
+            # Use robust CSV parsing to handle mixed data types
+            df = pd.read_csv(file_path, dtype=str, na_filter=False)
             
             # Extract invoice number and date from header
             invoice_number = file_path.stem  # Use filename as invoice number

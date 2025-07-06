@@ -52,13 +52,15 @@ class FileService:
             return []
         
         files = []
-        for file_path in source_dir.glob("*.csv"):
-            stat = file_path.stat()
-            files.append({
-                "name": file_path.name,
-                "size": stat.st_size,
-                "modified": stat.st_mtime
-            })
+        # Use case-insensitive file detection for CSV files
+        for file_path in source_dir.iterdir():
+            if file_path.is_file() and file_path.suffix.lower() == '.csv':
+                stat = file_path.stat()
+                files.append({
+                    "name": file_path.name,
+                    "size": stat.st_size,
+                    "modified": stat.st_mtime
+                })
         
         return files
     
@@ -86,12 +88,14 @@ class FileService:
             year_dir = output_dir / str(year)
             if not year_dir.exists():
                 return []
-            return [f.name for f in year_dir.glob("*.csv")]
+            # Use case-insensitive file detection for CSV files
+            return [f.name for f in year_dir.iterdir() if f.is_file() and f.suffix.lower() == '.csv']
         else:
             files = []
             for year_dir in output_dir.iterdir():
                 if year_dir.is_dir():
-                    files.extend([f"{year_dir.name}/{f.name}" for f in year_dir.glob("*.csv")])
+                    files.extend([f"{year_dir.name}/{f.name}" for f in year_dir.iterdir() 
+                                if f.is_file() and f.suffix.lower() == '.csv'])
             return files
     
     async def read_output_file(self, source: str, year: int, month: int) -> Optional[str]:
@@ -226,25 +230,8 @@ class FileService:
                         })
                 else:
                     # All months in year
-                    for file_path in year_dir.glob("*.csv"):
-                        stat = file_path.stat()
-                        # Extract month from filename (MM_YYYY.csv)
-                        month_str = file_path.stem.split('_')[0]
-                        month_num = int(month_str)
-                        files.append({
-                            "name": file_path.name,
-                            "path": str(file_path.relative_to(self.data_dir)),
-                            "year": year,
-                            "month": month_num,
-                            "size": stat.st_size,
-                            "modified": stat.st_mtime
-                        })
-            else:
-                # All years
-                for year_dir in output_dir.iterdir():
-                    if year_dir.is_dir() and year_dir.name.isdigit():
-                        year_num = int(year_dir.name)
-                        for file_path in year_dir.glob("*.csv"):
+                    for file_path in year_dir.iterdir():
+                        if file_path.is_file() and file_path.suffix.lower() == '.csv':
                             stat = file_path.stat()
                             # Extract month from filename (MM_YYYY.csv)
                             month_str = file_path.stem.split('_')[0]
@@ -252,11 +239,30 @@ class FileService:
                             files.append({
                                 "name": file_path.name,
                                 "path": str(file_path.relative_to(self.data_dir)),
-                                "year": year_num,
+                                "year": year,
                                 "month": month_num,
                                 "size": stat.st_size,
                                 "modified": stat.st_mtime
                             })
+            else:
+                # All years
+                for year_dir in output_dir.iterdir():
+                    if year_dir.is_dir() and year_dir.name.isdigit():
+                        year_num = int(year_dir.name)
+                        for file_path in year_dir.iterdir():
+                            if file_path.is_file() and file_path.suffix.lower() == '.csv':
+                                stat = file_path.stat()
+                                # Extract month from filename (MM_YYYY.csv)
+                                month_str = file_path.stem.split('_')[0]
+                                month_num = int(month_str)
+                                files.append({
+                                    "name": file_path.name,
+                                    "path": str(file_path.relative_to(self.data_dir)),
+                                    "year": year_num,
+                                    "month": month_num,
+                                    "size": stat.st_size,
+                                    "modified": stat.st_mtime
+                                })
             
             # Sort by year, then month
             files.sort(key=lambda x: (x["year"], x["month"]))
