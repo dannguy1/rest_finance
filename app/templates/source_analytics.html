@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}{{ source_name }} Analytics - Garlic and Chives{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex align-items-center">
+                <div class="me-3">
+                    <i class="bi bi-{{ source_icon }} fs-1 text-primary"></i>
+                </div>
+                <div>
+                    <h1 class="h3 mb-1">{{ source_name }} Analytics</h1>
+                    <p class="text-muted mb-0">{{ source_description }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Selection Info -->
+    <div class="row mb-4" id="file-selection-info" style="display: none;">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Selected File:</strong> <span id="analytics-filename"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Total Rows:</strong> <span id="analytics-total-rows"></span>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Type:</strong> <span id="analytics-file-type"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analytics Tabs -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <ul class="nav nav-tabs" id="analyticsTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="group-by-description-tab" data-bs-toggle="tab" data-bs-target="#group-by-description-pane" type="button" role="tab" aria-controls="group-by-description-pane" aria-selected="true">
+                        <i class="bi bi-list-group me-2"></i>
+                        Group by Description
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="monthly-summary-tab" data-bs-toggle="tab" data-bs-target="#monthly-summary-pane" type="button" role="tab" aria-controls="monthly-summary-pane" aria-selected="false">
+                        <i class="bi bi-calendar-month me-2"></i>
+                        Monthly Summary
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="amount-analysis-tab" data-bs-toggle="tab" data-bs-target="#amount-analysis-pane" type="button" role="tab" aria-controls="amount-analysis-pane" aria-selected="false">
+                        <i class="bi bi-graph-up me-2"></i>
+                        Amount Analysis
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="trends-tab" data-bs-toggle="tab" data-bs-target="#trends-pane" type="button" role="tab" aria-controls="trends-pane" aria-selected="false">
+                        <i class="bi bi-trending-up me-2"></i>
+                        Trends
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="analyticsTabsContent">
+        <!-- Group by Description Tab -->
+        <div class="tab-pane fade show active" id="group-by-description-pane" role="tabpanel" aria-labelledby="group-by-description-tab" tabindex="0">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                <i class="bi bi-list-group me-2"></i>
+                                Group by Description
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- Loading State -->
+                            <div class="text-center py-5" id="group-by-description-loading" style="display: none;">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2 text-muted">Analyzing data...</p>
+                            </div>
+
+                            <!-- Results -->
+                            <div id="group-by-description-results" style="display: none;">
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <div class="input-group">
+                                            <span class="input-group-text">
+                                                <i class="bi bi-search"></i>
+                                            </span>
+                                            <input type="text" class="form-control" id="description-search" placeholder="Search descriptions...">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 text-end">
+                                        <button class="btn btn-outline-secondary btn-sm" id="export-description-data">
+                                            <i class="bi bi-download me-1"></i>
+                                            Export
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped" id="description-group-table">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Description</th>
+                                                <th>Count</th>
+                                                <th>Total Amount</th>
+                                                <th>Average Amount</th>
+                                                <th>Min Amount</th>
+                                                <th>Max Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="description-group-body">
+                                            <!-- Data will be populated dynamically -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Empty State -->
+                            <div class="text-center py-5" id="group-by-description-empty">
+                                <i class="bi bi-file-earmark-text fs-1 text-muted mb-3"></i>
+                                <h5 class="text-muted">No file selected</h5>
+                                <p class="text-muted">Select a file from the source page to analyze its data.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monthly Summary Tab -->
+        <div class="tab-pane fade" id="monthly-summary-pane" role="tabpanel" aria-labelledby="monthly-summary-tab" tabindex="0">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="mb-0">
+                                <i class="bi bi-calendar-month me-2"></i>
+                                Monthly Summary
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- Loading State -->
+                            <div class="text-center py-5" id="monthly-summary-loading" style="display: none;">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2 text-muted">Analyzing monthly data...</p>
+                            </div>
+
+                            <!-- Results -->
+                            <div id="monthly-summary-results" style="display: none;">
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <canvas id="monthly-chart" height="300"></canvas>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h6 class="card-title">Summary Statistics</h6>
+                                                <div id="monthly-summary-stats">
+                                                    <!-- Stats will be populated dynamically -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Empty State -->
+                            <div class="text-center py-5" id="monthly-summary-empty">
+                                <i class="bi bi-file-earmark-text fs-1 text-muted mb-3"></i>
+                                <h5 class="text-muted">No file selected</h5>
+                                <p class="text-muted">Select a file from the source page to analyze its data.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Amount Analysis Tab -->
+        <div class="tab-pane fade" id="amount-analysis-pane" role="tabpanel" aria-labelledby="amount-analysis-tab" tabindex="0">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">
+                                <i class="bi bi-graph-up me-2"></i>
+                                Amount Analysis
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- Loading State -->
+                            <div class="text-center py-5" id="amount-analysis-loading" style="display: none;">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2 text-muted">Analyzing amounts...</p>
+                            </div>
+
+                            <!-- Results -->
+                            <div id="amount-analysis-results" style="display: none;">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <canvas id="amount-distribution-chart" height="300"></canvas>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <canvas id="amount-range-chart" height="300"></canvas>
+                                    </div>
+                                </div>
+                                <div class="row mt-4">
+                                    <div class="col-12">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h6 class="card-title">Amount Statistics</h6>
+                                                <div id="amount-statistics">
+                                                    <!-- Statistics will be populated dynamically -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Empty State -->
+                            <div class="text-center py-5" id="amount-analysis-empty">
+                                <i class="bi bi-file-earmark-text fs-1 text-muted mb-3"></i>
+                                <h5 class="text-muted">No file selected</h5>
+                                <p class="text-muted">Select a file from the source page to analyze its data.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trends Tab -->
+        <div class="tab-pane fade" id="trends-pane" role="tabpanel" aria-labelledby="trends-tab" tabindex="0">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-warning text-dark">
+                            <h5 class="mb-0">
+                                <i class="bi bi-trending-up me-2"></i>
+                                Trends Analysis
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- Loading State -->
+                            <div class="text-center py-5" id="trends-loading" style="display: none;">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <p class="mt-2 text-muted">Analyzing trends...</p>
+                            </div>
+
+                            <!-- Results -->
+                            <div id="trends-results" style="display: none;">
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <canvas id="trends-chart" height="300"></canvas>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <h6 class="card-title">Trend Insights</h6>
+                                                <div id="trend-insights">
+                                                    <!-- Insights will be populated dynamically -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Empty State -->
+                            <div class="text-center py-5" id="trends-empty">
+                                <i class="bi bi-file-earmark-text fs-1 text-muted mb-3"></i>
+                                <h5 class="text-muted">No file selected</h5>
+                                <p class="text-muted">Select a file from the source page to analyze its data.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Source-specific configuration
+    window.sourceConfig = {
+        source: '{{ source }}',
+        sourceName: '{{ source_name }}',
+        sourceIcon: '{{ source_icon }}'
+    };
+</script>
+<script src="/static/js/source_analytics.js?v={{ range(1, 1000) | random }}"></script>
+{% endblock %} 

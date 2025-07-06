@@ -226,6 +226,9 @@ class SourceApp {
                             <button type="button" class="btn btn-outline-primary" title="Preview CSV content" onclick="sourceApp.previewUploadedFile('${file.name}')">
                                 <i class="bi bi-eye"></i>
                             </button>
+                            <button type="button" class="btn btn-outline-secondary" title="Analytics" onclick="sourceApp.analyzeUploadedFile('${file.name}')">
+                                <i class="bi bi-graph-up"></i>
+                            </button>
                             <button type="button" class="btn btn-outline-warning" title="Process only this file" onclick="sourceApp.processFile('${file.name}')">
                                 <i class="bi bi-gear"></i>
                             </button>
@@ -354,6 +357,9 @@ class SourceApp {
                     <div class="tree-actions" style="display: flex; gap: 0.25rem; margin-left: auto; flex-shrink: 0; white-space: nowrap;">
                         <button type="button" class="btn btn-outline-primary btn-sm" title="Preview" onclick="sourceApp.previewFile('${file.path}')">
                             <i class="bi bi-eye"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-info btn-sm" title="Analytics" onclick="sourceApp.analyzeFile('${file.path}')">
+                            <i class="bi bi-graph-up"></i>
                         </button>
                         <button type="button" class="btn btn-outline-success btn-sm" title="Download" onclick="sourceApp.downloadFile('${file.path}')">
                             <i class="bi bi-download"></i>
@@ -1111,24 +1117,20 @@ class SourceApp {
         container.scrollIntoView({ behavior: 'smooth' });
     }
 
-    async analyzeFile(filename) {
-        try {
-            console.log('analyzeFile called with filename:', filename);
-            this.showAlert('Analyzing file...', 'info');
-            
-            const response = await fetch(`/api/files/analyze/${this.config.source}/${encodeURIComponent(filename)}`);
-            
-            if (response.ok) {
-                const result = await response.json();
-                console.log('Analysis result received:', result);
-                this.displayFileAnalysis(result);
-            } else {
-                throw new Error('File analysis failed');
-            }
-        } catch (error) {
-            console.error('Error in analyzeFile:', error);
-            this.showAlert('File analysis failed: ' + error.message, 'danger');
-        }
+    async analyzeFile(filePath) {
+        console.log('analyzeFile called with filePath:', filePath);
+        
+        // Navigate to analytics page with file parameters
+        const analyticsUrl = `/source/${this.config.source}/analytics?fileType=processed&filePath=${encodeURIComponent(filePath)}`;
+        window.location.href = analyticsUrl;
+    }
+
+    async analyzeUploadedFile(filename) {
+        console.log('analyzeUploadedFile called with filename:', filename);
+        
+        // Navigate to analytics page with file parameters
+        const analyticsUrl = `/source/${this.config.source}/analytics?fileType=uploaded&filePath=${encodeURIComponent(filename)}`;
+        window.location.href = analyticsUrl;
     }
 
     displayFileAnalysis(result) {

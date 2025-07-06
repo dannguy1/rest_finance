@@ -83,6 +83,25 @@ async def analytics_page(request: Request):
         "page_description": "Analyze your financial data with interactive charts and reports"
     })
 
+@router.get("/source/{source}/analytics", response_class=HTMLResponse)
+async def source_analytics_page(request: Request, source: str):
+    """Source-specific analytics page"""
+    if source not in SOURCE_CONFIGS:
+        # Redirect to dashboard if source not found
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/")
+    
+    config = SOURCE_CONFIGS[source]
+    return templates.TemplateResponse("source_analytics.html", {
+        "request": request,
+        "page_title": f"{config['name']} Analytics",
+        "page_description": f"Analyze {config['name']} data with interactive charts and reports",
+        "source": source,
+        "source_name": config["name"],
+        "source_icon": config["icon"],
+        "source_description": config["description"]
+    })
+
 @router.get("/download", response_class=HTMLResponse)
 async def download_page(request: Request):
     """Download page"""
