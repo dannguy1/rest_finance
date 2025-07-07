@@ -10,6 +10,38 @@ A full-stack web application for processing and validating financial data from m
 - **Metadata-Based Processing**: Enhanced validation using saved metadata from previous uploads
 - **Real-time Processing**: WebSocket support for real-time status updates
 - **Modern Web Interface**: Clean, responsive UI built with FastAPI and Jinja2
+- **PDF Merchant Statement Processing**: Extract and convert merchant statement PDFs to CSV format
+- **Multi-Level Table Sorting**: Advanced sorting with primary, secondary, and tertiary levels
+
+## PDF Extraction & Processing
+
+### Merchant Statement Support
+- **GG (Garlic & Chives)**: Process merchant statements with "SUMMARY OF MONETARY BATCHES" section
+- **AR (Example)**: Support for additional merchant types
+- **Flexible Column Matching**: Handles OCR artifacts, case variations, and spacing differences
+- **Robust Row Parsing**: Uses regex patterns to handle variable formatting and missing fields
+- **Date Formatting**: Converts MM/DD dates to YYYY-MM-DD format with year input
+- **Validation & Cleanup**: Removes invalid rows and provides detailed extraction statistics
+
+### CLI Tools
+```bash
+# Extract merchant statement
+python3 scripts/extract_pdf_table.py --pdf data/gg/input/Jan2025.pdf --vendor gg --year 2025
+
+# With debug information
+python3 scripts/extract_pdf_table.py --pdf data/gg/input/Jan2025.pdf --vendor gg --year 2025 --debug
+
+# Custom output path
+python3 scripts/extract_pdf_table.py --pdf data/gg/input/Jan2025.pdf --vendor gg --year 2025 --output data/gg/processed/Jan2025.csv
+```
+
+### Adding New Vendors
+1. Create configuration file in `config/` directory
+2. Define section header, expected columns, and validation rules
+3. Test extraction with debug mode
+4. Integrate with web interface
+
+See `scripts/README.md` for detailed documentation.
 
 ## Technology Stack
 
@@ -18,6 +50,7 @@ A full-stack web application for processing and validating financial data from m
 - **Data Processing**: Pandas, Pydantic
 - **Database**: SQLite (via SQLAlchemy)
 - **Validation**: Custom validation service with metadata support
+- **PDF Processing**: PyMuPDF for text extraction and table parsing
 
 ## Installation
 
@@ -58,9 +91,9 @@ rest_finance/
 │   ├── static/           # Static assets (CSS, JS)
 │   ├── templates/        # Jinja2 templates
 │   └── utils/            # Utility functions
-├── config/               # Configuration files
+├── config/               # Configuration files (including vendor PDF extraction configs)
 ├── data/                 # Data storage
-├── scripts/              # Utility scripts
+├── scripts/              # Utility scripts (including PDF extraction tools)
 ├── tests/                # Test files
 └── docs/                 # Documentation
 ```
@@ -81,6 +114,12 @@ rest_finance/
 - Support for CSV file uploads
 - Automatic format detection and correction
 - Batch processing capabilities
+
+### PDF Processing Service
+- Merchant statement PDF extraction
+- Vendor-specific configuration and validation
+- Robust table parsing with error handling
+- Integration with main data pipeline
 
 ## API Endpoints
 

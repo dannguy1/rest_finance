@@ -11,6 +11,7 @@ import pandas as pd
 import logging
 
 from app.utils.logging import processing_logger
+from app.utils.pdf_table_extractor import extract_section_table_from_pdf, GG_CONFIG, AR_CONFIG, extract_section_table_from_pdf_with_config, validate_pdf_format, load_vendor_config
 
 
 class PDFService:
@@ -257,51 +258,74 @@ class PDFService:
                 "error": str(e)
             }
     
-    def process_merchant_statement(self, pdf_path: Path, source: str) -> Optional[Path]:
+    def extract_vendor_section_table_to_csv(self, pdf_path: Path, vendor: str, year: int, output_csv: Optional[Path] = None) -> Optional[Path]:
         """
-        Process a merchant statement PDF and convert to CSV.
-        
+        Extract a vendor-specific section table from a PDF and write to CSV.
         Args:
-            pdf_path: Path to the PDF file
-            source: Source identifier (gg, ar, etc.)
-            
+            pdf_path: Path to PDF file
+            vendor: Vendor key (e.g., 'gg', 'ar')
+            year: Year to add to date column
+            output_csv: Optional path to write CSV
         Returns:
-            Path to the generated CSV file, or None if processing failed
+            Path to CSV or None
         """
         try:
-            # Validate PDF content
-            validation = self.validate_pdf_content(pdf_path)
-            if not validation["is_valid"]:
-                self.logger.log_system_event(
-                    f"Invalid PDF content for {pdf_path}: {validation.get('error', 'Unknown error')}", 
-                    level="error"
-                )
+            if output_csv is None:
+                output_path = pdf_path.parent / f"{pdf_path.stem}_extracted.csv"
+            else:
+                output_path = output_csv
+            
+            # Validate PDF format first
+            is_valid, error_msg = validate_pdf_format(pdf_path, vendor)
+            if not is_valid:
+                raise ValueError(f"PDF format validation failed: {error_msg}")
+            
+            # Extract table using configuration
+            df = extract_section_table_from_pdf_with_config(
+                pdf_path=pdf_path,
+                vendor=vendor,
+                year=year,
+                output_csv=output_path,
+                validate_format=True
+            )
+            
+            return output_path
+            
+        except Exception as e:
+            self.logger.log_system_event(f"Error extracting vendor table: {e}", level="error")
+            return None
+
+    def process_merchant_statement(self, pdf_path: Path, source: str, year: int) -> Optional[Path]:
+        """
+        Process a merchant statement PDF and convert to CSV.
+        Args:
+            pdf_path: Path to PDF file
+            source: Source identifier (e.g., 'gg', 'ar')
+            year: Year to add to date column
+        Returns:
+            Path to generated CSV or None
+        """
+        try:
+            # Validate that PDF extraction is enabled for this vendor
+            config = load_vendor_config(source)
+            pdf_config = config.get("pdf_extraction", {})
+            
+            if not pdf_config.get("enabled", False):
+                self.logger.log_system_event(f"PDF extraction not enabled for vendor '{source}'", level="warning")
                 return None
             
-            # Convert to CSV
-            csv_path = self.convert_pdf_to_csv(pdf_path)
-            if not csv_path:
-                return None
+            # Extract table using vendor configuration
+            csv_path = self.extract_vendor_section_table_to_csv(pdf_path, source, year)
             
-            # Validate the generated CSV
-            try:
-                df = pd.read_csv(csv_path)
-                if len(df) == 0:
-                    self.logger.log_system_event(f"Generated CSV is empty: {csv_path}", level="warning")
-                    return None
-                
-                self.logger.log_system_event(
-                    f"Successfully processed merchant statement: {pdf_path} -> {csv_path} ({len(df)} rows)", 
-                    level="info"
-                )
+            if csv_path:
+                self.logger.log_system_event(f"Successfully processed merchant statement: {csv_path}", level="info")
                 return csv_path
-                
-            except Exception as e:
-                self.logger.log_system_event(f"Error validating generated CSV: {str(e)}", level="error")
+            else:
+                self.logger.log_system_event(f"Failed to process merchant statement: {pdf_path}", level="error")
                 return None
                 
         except Exception as e:
-            self.logger.log_system_event(f"Error processing merchant statement {pdf_path}: {str(e)}", level="error")
+            self.logger.log_system_event(f"Error processing merchant statement: {e}", level="error")
             return None
 
 
