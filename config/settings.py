@@ -21,7 +21,7 @@ LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 # File processing settings
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB
-ALLOWED_EXTENSIONS = [".csv", ".xlsx", ".xls"]
+ALLOWED_EXTENSIONS = [".csv", ".xlsx", ".xls", ".pdf"]
 
 # Security settings
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")

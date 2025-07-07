@@ -42,7 +42,9 @@ def source_id_to_legacy_enum(source_id: str) -> str:
         "bankofamerica": "BankOfAmerica",
         "chase": "Chase", 
         "restaurantdepot": "RestaurantDepot",
-        "sysco": "Sysco"
+        "sysco": "Sysco",
+        "gg": "GG",
+        "ar": "AR"
     }
     return mapping.get(source_id, source_id)
 
@@ -135,30 +137,55 @@ class DataProcessor:
         if not source_dir.exists():
             return []
         
-        # Use case-insensitive file detection for CSV files
-        return [f for f in source_dir.iterdir() if f.is_file() and f.suffix.lower() == '.csv']
+        # Handle both CSV and PDF files
+        files = []
+        for f in source_dir.iterdir():
+            if f.is_file() and f.suffix.lower() in ['.csv', '.pdf']:
+                files.append(f)
+        
+        return files
     
     async def _parse_files(self, files: List[Path], source: str) -> List[Dict[str, Any]]:
         """Parse files based on source type using configuration."""
+        # Convert PDF files to CSV first
+        processed_files = []
+        for file_path in files:
+            if file_path.suffix.lower() == '.pdf':
+                from app.services.pdf_service import pdf_service
+                csv_path = pdf_service.process_merchant_statement(file_path, source)
+                if csv_path:
+                    processed_files.append(csv_path)
+                else:
+                    processing_logger.log_system_event(
+                        f"Failed to convert PDF to CSV: {file_path.name}", 
+                        level="warning"
+                    )
+            else:
+                processed_files.append(file_path)
+        
         # Get the source mapping configuration
         mapping = mapping_manager.get_mapping(source)
         if not mapping:
             # Fall back to legacy parsing if no mapping found
             legacy_source = source_id_to_legacy_enum(source)
             if legacy_source == "BankOfAmerica":
-                return await self._parse_boa_files(files)
+                return await self._parse_boa_files(processed_files)
             elif legacy_source == "Chase":
-                return await self._parse_chase_files(files)
+                return await self._parse_chase_files(processed_files)
             elif legacy_source == "RestaurantDepot":
-                return await self._parse_restaurant_depot_files(files)
+                return await self._parse_restaurant_depot_files(processed_files)
             elif legacy_source == "Sysco":
-                return await self._parse_sysco_files(files)
+                return await self._parse_sysco_files(processed_files)
+            elif legacy_source == "GG":
+                return await self._parse_gg_files(processed_files)
+            elif legacy_source == "AR":
+                return await self._parse_ar_files(processed_files)
             else:
                 raise ValueError(f"Unsupported source type: {source} (mapped to {legacy_source})")
         
         # Use configuration-based parsing for multiple files
         all_transactions = []
-        for file_path in files:
+        for file_path in processed_files:
             file_transactions = await self._parse_with_config(file_path, mapping)
             all_transactions.extend(file_transactions)
         
@@ -784,6 +811,144 @@ class DataProcessor:
                 
         except Exception as e:
             processing_logger.log_file_operation("parse", file_path.name, "Sysco", False, str(e))
+            raise
+        
+        return transactions
+
+    async def _parse_gg_files(self, files: List[Path]) -> List[Dict[str, Any]]:
+        """Parse GG merchant statement files."""
+        all_transactions = []
+        
+        for file_path in files:
+            try:
+                # Use robust CSV parsing to handle mixed data types
+                df = pd.read_csv(file_path, dtype=str, na_filter=False)
+                
+                # Validate required columns
+                required_columns = ['Date', 'Description', 'Amount']
+                if not all(col in df.columns for col in required_columns):
+                    raise ValueError(f"Missing required columns in {file_path.name}")
+                
+                for _, row in df.iterrows():
+                    try:
+                        transaction = {
+                            'date': str(row['Date']),
+                            'description': str(row['Description']),
+                            'amount': CSVUtils.clean_amount(row['Amount']),
+                            'source_file': file_path.name
+                        }
+                        all_transactions.append(transaction)
+                    except Exception as e:
+                        processing_logger.log_system_event(
+                            f"Error parsing row in {file_path.name}: {str(e)}", level="warning"
+                        )
+                        continue
+                        
+            except Exception as e:
+                processing_logger.log_file_operation("parse", file_path.name, "GG", False, str(e))
+                raise
+        
+        return all_transactions
+
+    async def _parse_ar_files(self, files: List[Path]) -> List[Dict[str, Any]]:
+        """Parse AR merchant statement files."""
+        all_transactions = []
+        
+        for file_path in files:
+            try:
+                # Use robust CSV parsing to handle mixed data types
+                df = pd.read_csv(file_path, dtype=str, na_filter=False)
+                
+                # Validate required columns
+                required_columns = ['Date', 'Description', 'Amount']
+                if not all(col in df.columns for col in required_columns):
+                    raise ValueError(f"Missing required columns in {file_path.name}")
+                
+                for _, row in df.iterrows():
+                    try:
+                        transaction = {
+                            'date': str(row['Date']),
+                            'description': str(row['Description']),
+                            'amount': CSVUtils.clean_amount(row['Amount']),
+                            'source_file': file_path.name
+                        }
+                        all_transactions.append(transaction)
+                    except Exception as e:
+                        processing_logger.log_system_event(
+                            f"Error parsing row in {file_path.name}: {str(e)}", level="warning"
+                        )
+                        continue
+                        
+            except Exception as e:
+                processing_logger.log_file_operation("parse", file_path.name, "AR", False, str(e))
+                raise
+        
+        return all_transactions
+
+    async def _parse_gg_single_file(self, file_path: Path) -> List[Dict[str, Any]]:
+        """Parse a single GG merchant statement file."""
+        transactions = []
+        
+        try:
+            # Use robust CSV parsing to handle mixed data types
+            df = pd.read_csv(file_path, dtype=str, na_filter=False)
+            
+            # Validate required columns
+            required_columns = ['Date', 'Description', 'Amount']
+            if not all(col in df.columns for col in required_columns):
+                raise ValueError(f"Missing required columns in {file_path.name}")
+            
+            for _, row in df.iterrows():
+                try:
+                    transaction = {
+                        'date': str(row['Date']),
+                        'description': str(row['Description']),
+                        'amount': CSVUtils.clean_amount(row['Amount']),
+                        'source_file': file_path.name
+                    }
+                    transactions.append(transaction)
+                except Exception as e:
+                    processing_logger.log_system_event(
+                        f"Error parsing row in {file_path.name}: {str(e)}", level="warning"
+                    )
+                    continue
+                    
+        except Exception as e:
+            processing_logger.log_file_operation("parse", file_path.name, "GG", False, str(e))
+            raise
+        
+        return transactions
+
+    async def _parse_ar_single_file(self, file_path: Path) -> List[Dict[str, Any]]:
+        """Parse a single AR merchant statement file."""
+        transactions = []
+        
+        try:
+            # Use robust CSV parsing to handle mixed data types
+            df = pd.read_csv(file_path, dtype=str, na_filter=False)
+            
+            # Validate required columns
+            required_columns = ['Date', 'Description', 'Amount']
+            if not all(col in df.columns for col in required_columns):
+                raise ValueError(f"Missing required columns in {file_path.name}")
+            
+            for _, row in df.iterrows():
+                try:
+                    transaction = {
+                        'date': str(row['Date']),
+                        'description': str(row['Description']),
+                        'amount': CSVUtils.clean_amount(row['Amount']),
+                        'source_file': file_path.name
+                    }
+                    transactions.append(transaction)
+                except Exception as e:
+                    processing_logger.log_system_event(
+                        f"Error parsing row in {file_path.name}: {str(e)}", level="warning"
+                    )
+                    continue
+                    
+        except Exception as e:
+            processing_logger.log_file_operation("parse", file_path.name, "AR", False, str(e))
             raise
         
         return transactions 

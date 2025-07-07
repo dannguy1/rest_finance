@@ -69,6 +69,26 @@ SOURCE_CONFIGS = {
         "description_column": "Description",
         "amount_column": "Total",
         "date_format": "MM/DD/YYYY"
+    },
+    "gg": {
+        "name": "GG",
+        "display_name": "GG",
+        "description": "GG merchant statement processing",
+        "required_columns": ["Date", "Description", "Amount"],
+        "date_column": "Date",
+        "description_column": "Description",
+        "amount_column": "Amount",
+        "date_format": "MM/DD/YYYY"
+    },
+    "ar": {
+        "name": "AR",
+        "display_name": "AR",
+        "description": "AR merchant statement processing",
+        "required_columns": ["Date", "Description", "Amount"],
+        "date_column": "Date",
+        "description_column": "Description",
+        "amount_column": "Amount",
+        "date_format": "MM/DD/YYYY"
     }
 }
 

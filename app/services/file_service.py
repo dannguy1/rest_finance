@@ -38,6 +38,22 @@ class FileService:
                 content = await file.read()
                 await f.write(content)
             
+            # If it's a PDF file, convert it to CSV
+            if safe_filename.lower().endswith('.pdf'):
+                from app.services.pdf_service import pdf_service
+                
+                csv_path = pdf_service.process_merchant_statement(file_path, source)
+                if csv_path:
+                    processing_logger.log_system_event(
+                        f"Successfully converted PDF to CSV: {safe_filename} -> {csv_path.name}", 
+                        level="info"
+                    )
+                else:
+                    processing_logger.log_system_event(
+                        f"Failed to convert PDF to CSV: {safe_filename}", 
+                        level="warning"
+                    )
+            
             processing_logger.log_file_operation("upload", safe_filename, source, True)
             return True
             
@@ -52,14 +68,15 @@ class FileService:
             return []
         
         files = []
-        # Use case-insensitive file detection for CSV files
+        # Handle both CSV and PDF files
         for file_path in source_dir.iterdir():
-            if file_path.is_file() and file_path.suffix.lower() == '.csv':
+            if file_path.is_file() and file_path.suffix.lower() in ['.csv', '.pdf']:
                 stat = file_path.stat()
                 files.append({
                     "name": file_path.name,
                     "size": stat.st_size,
-                    "modified": stat.st_mtime
+                    "modified": stat.st_mtime,
+                    "type": file_path.suffix.lower()
                 })
         
         return files
@@ -152,11 +169,18 @@ class FileService:
             if not FileUtils.is_valid_file_size(file_path):
                 errors.append(f"File too large (max {settings.max_file_size_mb}MB)")
             
-            # Check CSV structure
-            from app.utils.csv_utils import CSVUtils
-            is_valid, structure_errors = CSVUtils.validate_csv_structure(file_path, source)
-            if not is_valid:
-                errors.extend(structure_errors)
+            # Handle PDF files differently
+            if filename.lower().endswith('.pdf'):
+                from app.services.pdf_service import pdf_service
+                validation = pdf_service.validate_pdf_content(file_path)
+                if not validation["is_valid"]:
+                    errors.append(f"Invalid PDF content: {validation.get('error', 'Unknown error')}")
+            else:
+                # Check CSV structure for CSV files
+                from app.utils.csv_utils import CSVUtils
+                is_valid, structure_errors = CSVUtils.validate_csv_structure(file_path, source)
+                if not is_valid:
+                    errors.extend(structure_errors)
             
             return len(errors) == 0, errors
             

@@ -245,6 +245,80 @@ DEFAULT_SOURCE_MAPPINGS = {
             {"Date": "01/15/2024", "Description": "MEAT PRODUCTS", "Total": "225.50"},
             {"Date": "01/20/2024", "Description": "DAIRY PRODUCTS", "Total": "85.67"}
         ]
+    ),
+    
+    "gg": SourceMappingConfig(
+        source_id="gg",
+        display_name="GG",
+        description="GG merchant statement processing and management",
+        icon="credit-card",
+        date_mapping=ColumnMapping(
+            source_column="Date",
+            target_field="date",
+            mapping_type=MappingType.DATE,
+            required=True,
+            date_format="MM/DD/YYYY",
+            description="Transaction date"
+        ),
+        description_mapping=ColumnMapping(
+            source_column="Description",
+            target_field="description",
+            mapping_type=MappingType.DESCRIPTION,
+            required=True,
+            description="Transaction description"
+        ),
+        amount_mapping=ColumnMapping(
+            source_column="Amount",
+            target_field="amount",
+            mapping_type=MappingType.AMOUNT,
+            required=True,
+            amount_format="USD",
+            description="Transaction amount"
+        ),
+        optional_mappings=[],
+        expected_columns=["Date", "Description", "Amount"],
+        required_columns=["Date", "Description", "Amount"],
+        example_data=[
+            {"Date": "01/15/2024", "Description": "MERCHANT TRANSACTION", "Amount": "125.50"},
+            {"Date": "01/20/2024", "Description": "PAYMENT PROCESSING", "Amount": "45.67"}
+        ]
+    ),
+    
+    "ar": SourceMappingConfig(
+        source_id="ar",
+        display_name="AR",
+        description="AR merchant statement processing and management",
+        icon="credit-card",
+        date_mapping=ColumnMapping(
+            source_column="Date",
+            target_field="date",
+            mapping_type=MappingType.DATE,
+            required=True,
+            date_format="MM/DD/YYYY",
+            description="Transaction date"
+        ),
+        description_mapping=ColumnMapping(
+            source_column="Description",
+            target_field="description",
+            mapping_type=MappingType.DESCRIPTION,
+            required=True,
+            description="Transaction description"
+        ),
+        amount_mapping=ColumnMapping(
+            source_column="Amount",
+            target_field="amount",
+            mapping_type=MappingType.AMOUNT,
+            required=True,
+            amount_format="USD",
+            description="Transaction amount"
+        ),
+        optional_mappings=[],
+        expected_columns=["Date", "Description", "Amount"],
+        required_columns=["Date", "Description", "Amount"],
+        example_data=[
+            {"Date": "01/15/2024", "Description": "MERCHANT TRANSACTION", "Amount": "125.50"},
+            {"Date": "01/20/2024", "Description": "PAYMENT PROCESSING", "Amount": "45.67"}
+        ]
     )
 }
 

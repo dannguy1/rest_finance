@@ -37,6 +37,16 @@ SOURCE_CONFIGS = {
         "name": "RestaurantDepot",
         "icon": "shop",
         "description": "Restaurant Depot supplier receipt processing and management"
+    },
+    "gg": {
+        "name": "GG",
+        "icon": "credit-card",
+        "description": "GG merchant statement processing and management"
+    },
+    "ar": {
+        "name": "AR",
+        "icon": "credit-card",
+        "description": "AR merchant statement processing and management"
     }
 }
 
