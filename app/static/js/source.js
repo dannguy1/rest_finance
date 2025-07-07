@@ -673,8 +673,226 @@ class SourceApp {
             });
         }
         
+        // Setup sort controls
+        this.setupPreviewSortControls();
+        
         // Populate file dropdown
         this.populatePreviewFileDropdown();
+    }
+
+    setupPreviewSortControls() {
+        // Setup event listeners for all three sort levels
+        for (let level = 1; level <= 3; level++) {
+            const sortColumn = document.getElementById(`preview-sort-column-${level}`);
+            const sortAsc = document.getElementById(`preview-sort-asc-${level}`);
+            const sortDesc = document.getElementById(`preview-sort-desc-${level}`);
+            
+            if (sortColumn) {
+                sortColumn.addEventListener('change', () => {
+                    this.updateSortDirectionButtons(level);
+                });
+            }
+            
+            if (sortAsc) {
+                sortAsc.addEventListener('click', () => {
+                    this.setSortDirection(level, 'asc');
+                });
+            }
+            
+            if (sortDesc) {
+                sortDesc.addEventListener('click', () => {
+                    this.setSortDirection(level, 'desc');
+                });
+            }
+        }
+        
+        // Setup apply button
+        const sortApply = document.getElementById('preview-sort-apply');
+        if (sortApply) {
+            sortApply.addEventListener('click', () => {
+                this.applyPreviewSort();
+            });
+        }
+        
+        // Setup clear button
+        const sortClear = document.getElementById('preview-sort-clear');
+        if (sortClear) {
+            sortClear.addEventListener('click', () => {
+                this.clearPreviewSort();
+            });
+        }
+    }
+
+    updateSortDirectionButtons(level) {
+        const sortColumn = document.getElementById(`preview-sort-column-${level}`);
+        const sortAsc = document.getElementById(`preview-sort-asc-${level}`);
+        const sortDesc = document.getElementById(`preview-sort-desc-${level}`);
+        
+        if (sortColumn && sortAsc && sortDesc) {
+            const hasColumn = sortColumn.value !== '';
+            sortAsc.disabled = !hasColumn;
+            sortDesc.disabled = !hasColumn;
+            
+            // Reset button states
+            sortAsc.classList.remove('active');
+            sortDesc.classList.remove('active');
+        }
+    }
+
+    setSortDirection(level, direction) {
+        const sortAsc = document.getElementById(`preview-sort-asc-${level}`);
+        const sortDesc = document.getElementById(`preview-sort-desc-${level}`);
+        
+        if (sortAsc && sortDesc) {
+            sortAsc.classList.remove('active');
+            sortDesc.classList.remove('active');
+            
+            if (direction === 'asc') {
+                sortAsc.classList.add('active');
+            } else {
+                sortDesc.classList.add('active');
+            }
+        }
+    }
+
+    applyPreviewSort() {
+        if (!this.currentPreviewData) return;
+        
+        // Collect all active sort criteria
+        const sortCriteria = [];
+        
+        for (let level = 1; level <= 3; level++) {
+            const sortColumn = document.getElementById(`preview-sort-column-${level}`);
+            const sortAsc = document.getElementById(`preview-sort-asc-${level}`);
+            
+            if (sortColumn && sortColumn.value !== '') {
+                const columnIndex = parseInt(sortColumn.value);
+                const isAscending = sortAsc.classList.contains('active');
+                
+                sortCriteria.push({
+                    columnIndex: columnIndex,
+                    ascending: isAscending,
+                    level: level
+                });
+            }
+        }
+        
+        if (sortCriteria.length === 0) {
+            // No sorting criteria, show original data
+            this.displayPreviewTableWithData(this.currentPreviewData.headers, this.currentPreviewData.rows);
+            return;
+        }
+        
+        // Sort the data using all criteria
+        const sortedRows = [...this.currentPreviewData.rows].sort((a, b) => {
+            for (const criteria of sortCriteria) {
+                const aVal = a[criteria.columnIndex] || '';
+                const bVal = b[criteria.columnIndex] || '';
+                
+                // Try to parse as numbers for numeric sorting
+                const aNum = parseFloat(aVal);
+                const bNum = parseFloat(bVal);
+                
+                let comparison = 0;
+                
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    comparison = aNum - bNum;
+                } else {
+                    // String comparison
+                    comparison = aVal.toString().localeCompare(bVal.toString());
+                }
+                
+                // Apply sort direction
+                if (!criteria.ascending) {
+                    comparison = -comparison;
+                }
+                
+                // If this level has a difference, return it
+                if (comparison !== 0) {
+                    return comparison;
+                }
+                
+                // If equal, continue to next sort level
+            }
+            
+            return 0; // All criteria are equal
+        });
+        
+        // Update the table with sorted data
+        this.displayPreviewTableWithData(this.currentPreviewData.headers, sortedRows);
+    }
+
+    clearPreviewSort() {
+        // Clear all sort selections
+        for (let level = 1; level <= 3; level++) {
+            const sortColumn = document.getElementById(`preview-sort-column-${level}`);
+            const sortAsc = document.getElementById(`preview-sort-asc-${level}`);
+            const sortDesc = document.getElementById(`preview-sort-desc-${level}`);
+            
+            if (sortColumn) {
+                sortColumn.value = '';
+            }
+            
+            if (sortAsc) {
+                sortAsc.classList.remove('active');
+                sortAsc.disabled = true;
+            }
+            
+            if (sortDesc) {
+                sortDesc.classList.remove('active');
+                sortDesc.disabled = true;
+            }
+        }
+        
+        // Show original data
+        if (this.currentPreviewData) {
+            this.displayPreviewTableWithData(this.currentPreviewData.headers, this.currentPreviewData.rows);
+        }
+    }
+
+    formatTableCell(cell, index, headers) {
+        if (!cell) return '';
+        
+        const header = headers[index] ? headers[index].toLowerCase() : '';
+        const value = cell.toString();
+        
+        // Format amounts (assuming amount columns contain numbers)
+        if (header.includes('amount') || header.includes('total') || header.includes('sum')) {
+            const num = parseFloat(value);
+            if (!isNaN(num)) {
+                return num.toLocaleString('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+            }
+        }
+        
+        // Format dates
+        if (header.includes('date')) {
+            const date = new Date(value);
+            if (!isNaN(date.getTime())) {
+                return date.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            }
+        }
+        
+        // Format large numbers
+        const num = parseFloat(value);
+        if (!isNaN(num) && Math.abs(num) >= 1000) {
+            return num.toLocaleString('en-US');
+        }
+        
+        // Truncate long descriptions
+        if (header.includes('description') && value.length > 50) {
+            return `<span title="${value}">${value.substring(0, 47)}...</span>`;
+        }
+        
+        return value;
     }
 
     async populatePreviewFileDropdown() {
@@ -761,11 +979,15 @@ class SourceApp {
         // Show file info
         this.showPreviewFileInfo(data, fileType);
         
+        // Setup sort controls with column options
+        this.setupPreviewSortOptions(data.headers);
+        
         // Display the full table
         this.displayPreviewTable(data);
         
-        // Store current file info for download
+        // Store current file info for download and sorting
         this.currentPreviewFile = { type: fileType, path: filePath, data: data };
+        this.currentPreviewData = data;
     }
 
     showPreviewFileInfo(data, fileType) {
@@ -786,12 +1008,16 @@ class SourceApp {
     }
 
     displayPreviewTable(data) {
+        this.displayPreviewTableWithData(data.headers, data.rows);
+    }
+
+    displayPreviewTableWithData(headers, rows) {
         const container = document.getElementById('preview-table-container');
-        const headers = document.getElementById('preview-table-headers');
+        const headersElement = document.getElementById('preview-table-headers');
         const tbody = document.getElementById('preview-table-body');
         const emptyState = document.getElementById('preview-empty-state');
         
-        if (!container || !headers || !tbody) return;
+        if (!container || !headersElement || !tbody) return;
         
         // Hide empty state
         if (emptyState) {
@@ -799,14 +1025,17 @@ class SourceApp {
         }
         
         // Set up headers
-        if (data.headers && data.headers.length > 0) {
-            headers.innerHTML = data.headers.map(header => `<th>${header}</th>`).join('');
+        if (headers && headers.length > 0) {
+            headersElement.innerHTML = headers.map(header => `<th>${header}</th>`).join('');
         }
         
         // Set up data - show all rows for full preview
-        if (data.rows && data.rows.length > 0) {
-            tbody.innerHTML = data.rows.map(row => 
-                `<tr>${row.map(cell => `<td>${cell || ''}</td>`).join('')}</tr>`
+        if (rows && rows.length > 0) {
+            tbody.innerHTML = rows.map(row => 
+                `<tr>${row.map((cell, index) => {
+                    const formattedCell = this.formatTableCell(cell, index, headers);
+                    return `<td>${formattedCell}</td>`;
+                }).join('')}</tr>`
             ).join('');
         } else {
             tbody.innerHTML = '<tr><td colspan="100%" class="text-center text-muted">No data available</td></tr>';
@@ -834,11 +1063,47 @@ class SourceApp {
         }
     }
 
+    setupPreviewSortOptions(headers) {
+        const sortControls = document.getElementById('preview-sort-controls');
+        
+        if (sortControls && headers && headers.length > 0) {
+            // Populate all three sort dropdowns
+            for (let level = 1; level <= 3; level++) {
+                const sortColumn = document.getElementById(`preview-sort-column-${level}`);
+                
+                if (sortColumn) {
+                    // Clear existing options
+                    sortColumn.innerHTML = '<option value="">No sorting</option>';
+                    
+                    // Add column options
+                    headers.forEach((header, index) => {
+                        const option = document.createElement('option');
+                        option.value = index;
+                        option.textContent = header;
+                        sortColumn.appendChild(option);
+                    });
+                    
+                    // Reset sort direction buttons for this level
+                    this.updateSortDirectionButtons(level);
+                }
+            }
+            
+            // Show sort controls
+            sortControls.style.display = 'block';
+        }
+    }
+
     clearPreview() {
         // Hide file info
         const fileInfo = document.getElementById('preview-file-info');
         if (fileInfo) {
             fileInfo.style.display = 'none';
+        }
+        
+        // Hide sort controls
+        const sortControls = document.getElementById('preview-sort-controls');
+        if (sortControls) {
+            sortControls.style.display = 'none';
         }
         
         // Hide table container
@@ -853,8 +1118,9 @@ class SourceApp {
             emptyState.style.display = 'block';
         }
         
-        // Clear current preview file
+        // Clear current preview file and data
         this.currentPreviewFile = null;
+        this.currentPreviewData = null;
     }
 
     async downloadCurrentPreviewFile() {

@@ -220,6 +220,79 @@
                                 </div>
                             </div>
 
+                            <!-- Sort Controls -->
+                            <div class="row mb-3" id="preview-sort-controls" style="display: none;">
+                                <div class="col-12">
+                                    <div class="card border-light">
+                                        <div class="card-body py-2">
+                                            <div class="d-flex align-items-center flex-wrap">
+                                                <label class="form-label mb-0 me-3">
+                                                    <i class="bi bi-sort-down me-1"></i>
+                                                    Sort by:
+                                                </label>
+                                                
+                                                <!-- Primary Sort -->
+                                                <div class="d-flex align-items-center me-3">
+                                                    <span class="badge bg-primary me-2">1st</span>
+                                                    <select class="form-select form-select-sm me-2" id="preview-sort-column-1" style="width: auto;">
+                                                        <option value="">No sorting</option>
+                                                    </select>
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <button type="button" class="btn btn-outline-primary" id="preview-sort-asc-1" title="Sort ascending">
+                                                            <i class="bi bi-sort-up"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-primary" id="preview-sort-desc-1" title="Sort descending">
+                                                            <i class="bi bi-sort-down"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                
+                                                <!-- Secondary Sort -->
+                                                <div class="d-flex align-items-center me-3">
+                                                    <span class="badge bg-secondary me-2">2nd</span>
+                                                    <select class="form-select form-select-sm me-2" id="preview-sort-column-2" style="width: auto;">
+                                                        <option value="">No sorting</option>
+                                                    </select>
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <button type="button" class="btn btn-outline-secondary" id="preview-sort-asc-2" title="Sort ascending">
+                                                            <i class="bi bi-sort-up"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-secondary" id="preview-sort-desc-2" title="Sort descending">
+                                                            <i class="bi bi-sort-down"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                
+                                                <!-- Tertiary Sort -->
+                                                <div class="d-flex align-items-center me-3">
+                                                    <span class="badge bg-info me-2">3rd</span>
+                                                    <select class="form-select form-select-sm me-2" id="preview-sort-column-3" style="width: auto;">
+                                                        <option value="">No sorting</option>
+                                                    </select>
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <button type="button" class="btn btn-outline-info" id="preview-sort-asc-3" title="Sort ascending">
+                                                            <i class="bi bi-sort-up"></i>
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-info" id="preview-sort-desc-3" title="Sort descending">
+                                                            <i class="bi bi-sort-down"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                
+                                                <button type="button" class="btn btn-outline-secondary btn-sm ms-3" id="preview-sort-apply" title="Apply sorting">
+                                                    <i class="bi bi-check me-1"></i>
+                                                    Apply
+                                                </button>
+                                                <button type="button" class="btn btn-outline-danger btn-sm ms-2" id="preview-sort-clear" title="Clear all sorting">
+                                                    <i class="bi bi-x me-1"></i>
+                                                    Clear
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Full File Preview -->
                             <div class="table-responsive" id="preview-table-container" style="display: none;">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -232,8 +305,8 @@
                                     </div>
                                 </div>
                                 <div class="border rounded" style="max-height: 600px; overflow: auto;">
-                                    <table class="table table-sm table-striped mb-0" id="preview-full-table">
-                                        <thead class="table-light sticky-top">
+                                    <table class="table mb-0" id="preview-full-table">
+                                        <thead class="sticky-top">
                                             <tr id="preview-table-headers">
                                                 <!-- Headers will be populated dynamically -->
                                             </tr>

@@ -651,4 +651,359 @@ main {
 .form-select:focus {
     border-color: var(--bs-primary);
     box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Sort Controls Styles */
+#preview-sort-controls .card {
+    background-color: #f8f9fa;
+    border: 1px solid #e9ecef;
+}
+
+#preview-sort-controls .form-select {
+    min-width: 120px;
+}
+
+/* Primary sort (1st level) */
+#preview-sort-asc-1.active,
+#preview-sort-desc-1.active {
+    background-color: var(--bs-primary);
+    border-color: var(--bs-primary);
+    color: white;
+}
+
+#preview-sort-asc-1:disabled,
+#preview-sort-desc-1:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Secondary sort (2nd level) */
+#preview-sort-asc-2.active,
+#preview-sort-desc-2.active {
+    background-color: var(--bs-secondary);
+    border-color: var(--bs-secondary);
+    color: white;
+}
+
+#preview-sort-asc-2:disabled,
+#preview-sort-desc-2:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Tertiary sort (3rd level) */
+#preview-sort-asc-3.active,
+#preview-sort-desc-3.active {
+    background-color: var(--bs-info);
+    border-color: var(--bs-info);
+    color: white;
+}
+
+#preview-sort-asc-3:disabled,
+#preview-sort-desc-3:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#preview-sort-apply {
+    transition: all 0.2s ease-in-out;
+}
+
+#preview-sort-apply:hover {
+    background-color: var(--bs-secondary);
+    border-color: var(--bs-secondary);
+    color: white;
+}
+
+/* Responsive adjustments for sort controls */
+@media (max-width: 768px) {
+    #preview-sort-controls .d-flex {
+        flex-direction: column;
+        align-items: stretch !important;
+    }
+    
+    #preview-sort-controls .d-flex > div {
+        margin-bottom: 0.5rem;
+    }
+    
+    #preview-sort-controls .form-select {
+        min-width: 100px;
+    }
+}
+
+/* Enhanced Table Styles */
+#preview-full-table {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 0.9rem;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    background: white;
+}
+
+#preview-full-table thead {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+}
+
+#preview-full-table thead th {
+    padding: 1rem 1.25rem;
+    border: none;
+    position: relative;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+#preview-full-table thead th:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 25%;
+    bottom: 25%;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+#preview-full-table tbody {
+    background: white;
+}
+
+#preview-full-table tbody tr {
+    transition: all 0.2s ease-in-out;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+#preview-full-table tbody tr:hover {
+    background: linear-gradient(135deg, #f8f9ff 0%, #e8f2ff 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+#preview-full-table tbody tr:nth-child(even) {
+    background: #fafbfc;
+}
+
+#preview-full-table tbody tr:nth-child(even):hover {
+    background: linear-gradient(135deg, #f0f4ff 0%, #e0f0ff 100%);
+}
+
+#preview-full-table tbody td {
+    padding: 1rem 1.25rem;
+    border: none;
+    vertical-align: middle;
+    color: #2c3e50;
+    font-weight: 400;
+    line-height: 1.4;
+}
+
+#preview-full-table tbody td:first-child {
+    font-weight: 600;
+    color: #34495e;
+}
+
+/* Numeric column styling */
+#preview-full-table tbody td:nth-child(4) {
+    font-family: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+    font-weight: 600;
+    text-align: right;
+    color: #27ae60;
+}
+
+/* Date column styling */
+#preview-full-table tbody td:nth-child(3) {
+    font-family: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+    color: #7f8c8d;
+    font-size: 0.85rem;
+}
+
+/* Description column styling */
+#preview-full-table tbody td:nth-child(2) {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Table container styling */
+#preview-table-container .border.rounded {
+    border: none !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+}
+
+/* Sticky header enhancement */
+#preview-full-table thead.sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Empty state styling */
+#preview-full-table tbody tr td[colspan] {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #95a5a6;
+    font-style: italic;
+    background: #f8f9fa;
+}
+
+/* Responsive table improvements */
+@media (max-width: 768px) {
+    #preview-full-table {
+        font-size: 0.8rem;
+    }
+    
+    #preview-full-table thead th,
+    #preview-full-table tbody td {
+        padding: 0.75rem 0.5rem;
+    }
+    
+    #preview-full-table thead th {
+        font-size: 0.75rem;
+    }
+    
+    #preview-full-table tbody td:nth-child(2) {
+        max-width: 150px;
+    }
+}
+
+/* Loading state enhancement */
+#preview-loading {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    color: white;
+    padding: 2rem;
+    margin: 2rem 0;
+}
+
+#preview-loading .spinner-border {
+    color: white;
+}
+
+/* File info styling enhancement */
+#preview-file-info .alert {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+#preview-file-info .alert strong {
+    color: #1976d2;
+    font-weight: 600;
+}
+
+/* Additional typography improvements */
+#preview-full-table {
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Enhanced hover effects */
+#preview-full-table tbody tr:hover td {
+    color: #1a1a1a;
+    font-weight: 500;
+}
+
+/* Better spacing for mobile */
+@media (max-width: 576px) {
+    #preview-full-table {
+        font-size: 0.75rem;
+    }
+    
+    #preview-full-table thead th,
+    #preview-full-table tbody td {
+        padding: 0.5rem 0.25rem;
+    }
+    
+    #preview-full-table thead th {
+        font-size: 0.7rem;
+        letter-spacing: 0.3px;
+    }
+}
+
+/* Smooth scrolling for table container */
+#preview-table-container .border.rounded {
+    scroll-behavior: smooth;
+}
+
+/* Enhanced focus states for accessibility */
+#preview-full-table tbody tr:focus-within {
+    outline: 2px solid #667eea;
+    outline-offset: -2px;
+}
+
+/* Loading animation enhancement */
+#preview-loading .spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
+
+#preview-loading p {
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin-top: 1rem;
+}
+
+/* Enhanced table header styling */
+#preview-full-table thead th {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+    padding: 1rem 1.25rem;
+    border: none;
+    position: relative;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    font-family: 'Inter', sans-serif;
+}
+
+/* Better table row transitions */
+#preview-full-table tbody tr {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-bottom: 1px solid #f0f0f0;
+}
+
+#preview-full-table tbody tr:hover {
+    background: linear-gradient(135deg, #f8f9ff 0%, #e8f2ff 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Enhanced cell styling */
+#preview-full-table tbody td {
+    padding: 1rem 1.25rem;
+    border: none;
+    vertical-align: middle;
+    color: #2c3e50;
+    font-weight: 400;
+    line-height: 1.5;
+    font-family: 'Inter', sans-serif;
+}
+
+/* Better typography for different data types */
+#preview-full-table tbody td:first-child {
+    font-weight: 600;
+    color: #34495e;
+    font-family: 'Inter', sans-serif;
+}
+
+/* Improved container styling */
+#preview-table-container .border.rounded {
+    border: none !important;
+    border-radius: 16px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+    background: white;
 } 
