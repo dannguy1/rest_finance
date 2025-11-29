@@ -5,13 +5,16 @@ import psutil
 import os
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from app.config import settings
 from app.utils.logging import processing_logger
 from app.models.file_models import HealthCheck, DetailedHealthCheck
+from app.exceptions import handle_service_errors
+from app.monitoring.metrics import update_system_metrics
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
@@ -19,6 +22,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 @router.get("/", response_model=HealthCheck)
 @limiter.limit(settings.rate_limit_api)
+@handle_service_errors
 async def health_check(request: Request):
     """Basic health check endpoint."""
     return HealthCheck(
@@ -30,6 +34,7 @@ async def health_check(request: Request):
 
 @router.get("/detailed", response_model=DetailedHealthCheck)
 @limiter.limit(settings.rate_limit_api)
+@handle_service_errors
 async def detailed_health_check(request: Request):
     """Detailed health check with system metrics."""
     try:
@@ -98,6 +103,7 @@ async def detailed_health_check(request: Request):
 
 @router.get("/ready")
 @limiter.limit(settings.rate_limit_api)
+@handle_service_errors
 async def readiness_check(request: Request):
     """Readiness check for Kubernetes/container orchestration."""
     try:
@@ -127,6 +133,7 @@ async def readiness_check(request: Request):
 
 @router.get("/live")
 @limiter.limit(settings.rate_limit_api)
+@handle_service_errors
 async def liveness_check(request: Request):
     """Liveness check for Kubernetes/container orchestration."""
     return {"status": "alive", "timestamp": datetime.now().isoformat()}
@@ -134,6 +141,7 @@ async def liveness_check(request: Request):
 
 @router.get("/metrics")
 @limiter.limit(settings.rate_limit_api)
+@handle_service_errors
 async def metrics(request: Request):
     """Application metrics endpoint."""
     try:
@@ -167,3 +175,14 @@ async def metrics(request: Request):
             f"Metrics error: {str(e)}", level="error"
         )
         return {"error": str(e)} 
+
+
+@router.get("/prometheus")
+async def prometheus_metrics():
+    """Prometheus-format metrics endpoint."""
+    # Update system metrics before serving
+    update_system_metrics()
+    
+    # Generate and return Prometheus metrics
+    metrics = generate_latest()
+    return Response(content=metrics, media_type=CONTENT_TYPE_LATEST) 

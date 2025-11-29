@@ -15,6 +15,12 @@ from werkzeug.utils import secure_filename
 
 from app.config import settings
 from app.utils.logging import processing_logger
+from app.exceptions import (
+    handle_service_errors,
+    InvalidMappingError,
+    MappingNotFoundError,
+    bad_request_error
+)
 from app.config.source_mapping import (
     SourceMappingConfig, 
     ColumnMapping, 
@@ -32,60 +38,48 @@ limiter = Limiter(key_func=get_remote_address)
 
 @router.get("")
 @limiter.limit(settings.rate_limit_api)
+@handle_service_errors
 async def list_source_mappings(request: Request):
     """List all available source mapping configurations."""
-    try:
-        mappings = mapping_manager.get_all_mappings()
-        return {
-            "mappings": {
-                source_id: mapping_manager.get_mapping_summary(source_id)
-                for source_id in mappings.keys()
-            },
-            "count": len(mappings)
-        }
-    except Exception as e:
-        processing_logger.log_system_event(
-            f"Error listing source mappings: {str(e)}", level="error"
-        )
-        raise HTTPException(status_code=500, detail=str(e))
+    mappings = mapping_manager.get_all_mappings()
+    return {
+        "mappings": {
+            source_id: mapping_manager.get_mapping_summary(source_id)
+            for source_id in mappings.keys()
+        },
+        "count": len(mappings)
+    }
 
 
 @router.get("/{source_id}")
 @limiter.limit(settings.rate_limit_api)
+@handle_service_errors
 async def get_source_mapping(source_id: str, request: Request):
     """Get detailed mapping configuration for a specific source."""
-    try:
-        mapping = mapping_manager.get_mapping(source_id)
-        if not mapping:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Source mapping not found for '{source_id}'"
-            )
-        
-        return {
-            "mapping": mapping.dict(),
-            "summary": mapping_manager.get_mapping_summary(source_id)
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        processing_logger.log_system_event(
-            f"Error getting source mapping for {source_id}: {str(e)}", level="error"
+    mapping = mapping_manager.get_mapping(source_id)
+    if not mapping:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Source mapping not found for '{source_id}'"
         )
-        raise HTTPException(status_code=500, detail=str(e))
+    
+    return {
+        "mapping": mapping.dict(),
+        "summary": mapping_manager.get_mapping_summary(source_id)
+    }
 
 
 @router.post("")
 @limiter.limit(settings.rate_limit_api)
+@handle_service_errors
 async def create_source_mapping(mapping: SourceMappingConfig, request: Request):
     """Create a new source mapping configuration."""
-    try:
-        # Require sample data for validation
-        if not mapping.example_data:
-            raise HTTPException(
-                status_code=400,
-                detail="Sample data is required. Please provide example_data in the mapping configuration."
-            )
+    # Require sample data for validation
+    if not mapping.example_data:
+        raise InvalidMappingError(
+            "Sample data is required. Please provide example_data in the mapping configuration.",
+            {"source_id": mapping.source_id}
+        )
         
         # Validate the mapping with sample data
         validation_result = mapping_validation_service.validate_mapping_comprehensive(
@@ -99,37 +93,31 @@ async def create_source_mapping(mapping: SourceMappingConfig, request: Request):
                 detail=f"Invalid mapping configuration: {'; '.join(validation_result['errors'])}"
             )
         
-        # Check if mapping already exists
-        existing = mapping_manager.get_mapping(mapping.source_id)
-        if existing:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Source mapping already exists for '{mapping.source_id}'"
-            )
-        
-        # Add the mapping
-        mapping_manager.add_mapping(mapping)
-        
-        processing_logger.log_system_event(
-            f"Created source mapping for {mapping.source_id}", level="info"
+    # Check if mapping already exists
+    existing = mapping_manager.get_mapping(mapping.source_id)
+    if existing:
+        raise bad_request_error(
+            f"Source mapping already exists for '{mapping.source_id}'",
+            {"source_id": mapping.source_id}
         )
         
-        return {
-            "message": "Source mapping created successfully",
-            "mapping": mapping.dict(),
-            "summary": mapping_manager.get_mapping_summary(mapping.source_id)
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        processing_logger.log_system_event(
-            f"Error creating source mapping: {str(e)}", level="error"
-        )
-        raise HTTPException(status_code=500, detail=str(e))
+    # Add the mapping
+    mapping_manager.add_mapping(mapping)
+    
+    processing_logger.log_system_event(
+        f"Created source mapping for {mapping.source_id}", level="info"
+    )
+    
+    return {
+        "message": "Source mapping created successfully",
+        "mapping": mapping.dict(),
+        "summary": mapping_manager.get_mapping_summary(mapping.source_id)
+    }
 
 
 @router.put("/{source_id}")
 @limiter.limit(settings.rate_limit_api)
+@handle_service_errors
 async def update_source_mapping(source_id: str, mapping: SourceMappingConfig, request: Request):
     """Update an existing source mapping configuration."""
     try:

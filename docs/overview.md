@@ -43,32 +43,44 @@
 ## Core Features
 
 ### 1. Multi-Source Data Processing
-- **Bank of America**: CSV statement processing with transaction grouping
-- **Chase**: Credit card statement processing
+- **Bank of America**: CSV statement processing with transaction grouping and status filtering
+- **Chase**: Credit card statement processing with flexible header detection
 - **Restaurant Depot**: Invoice receipt processing
 - **Sysco**: Invoice processing
+- **GG (Garlic & Chives)**: Merchant statement PDF processing
+- **AR**: Additional merchant statement processing
 
 ### 2. Enhanced Source Mapping System
-- **Persistent Configuration**: Source mappings stored as JSON files in `config/` directory
+- **Persistent Configuration**: Source mappings stored as JSON files in `config/` directory with full metadata
 - **Metadata Management**: Processed sample data metadata stored in `data/source_metadata/`
 - **Auto-Loading**: Existing metadata automatically loads when source ID is entered
 - **Settings Restore**: Full configuration backup and restore including sample data
-- **Validation**: Multi-level validation system (see `docs/VALIDATION_SYSTEM.md`)
+- **Validation**: Multi-level validation system with robust CSV parsing (see `docs/VALIDATION_SYSTEM.md`)
+- **Flexible Header Matching**: Supports multiple header patterns per source for variant file formats
 
-### 3. Automated File Organization
+### 3. Robust CSV Processing
+- **Enterprise-Grade Parsing**: Handles malformed rows, encoding detection, and variable header locations
+- **Metadata-Driven Validation**: Uses source-specific rules for comprehensive validation
+- **Automatic Error Recovery**: Filters invalid rows while preserving good data
+- **Multiple Encoding Support**: Auto-detects UTF-8, UTF-8-BOM, and other encodings
+- **CLI Validation Tool**: Command-line interface for batch validation and automation
+
+### 4. Automated File Organization
 - **Year/Month Collation**: Automatic organization by year and month
-- **Source Separation**: Dedicated directories for each data source
-- **Structured Output**: Consistent CSV format with grouped aggregations
+- **Source Separation**: Dedicated directories for each data source (`data/{source}/input/` and `data/{source}/output/`)
+- **Structured Output**: Consistent CSV format with source file tracking
 
-### 4. Real-Time Processing
-- **WebSocket Updates**: Live processing status and progress
-- **Drag & Drop Upload**: Source-specific upload zones
+### 5. Real-Time Processing
+- **WebSocket Updates**: Live processing status and progress (via `/ws` endpoint)
+- **Drag & Drop Upload**: Source-specific upload zones with file validation
 - **Progress Tracking**: Real-time feedback during file processing
+- **Background Processing**: Asynchronous processing with status polling
 
-### 5. Data Visualization
-- **Chart.js Integration**: Spending patterns and analytics
-- **Responsive Tables**: Bootstrap-styled data tables with sorting
-- **Interactive Dashboard**: Real-time data overview
+### 6. Data Visualization & Analytics
+- **Chart.js Integration**: Spending patterns and analytics visualization
+- **Responsive Tables**: Bootstrap-styled data tables with sorting and filtering
+- **Interactive Dashboard**: Real-time data overview with file statistics
+- **Source Analytics**: Per-source analytics and processing history
 
 ## Project Structure
 ```
@@ -119,22 +131,59 @@ rest_finance/
 
 ### Processing Flow
 ```
-Upload Sample File → Generate Metadata → Configure Mapping → Process Files → Year/Month Collation → Grouped Aggregation → CSV Output Generation
+Upload Sample File → Generate Metadata → Configure Mapping → Validate Configuration → Upload Data Files → Robust CSV Parsing → Data Validation → Year/Month Collation → CSV Output Generation → File Preview/Download
 ```
+
+### Detailed Pipeline Steps
+1. **Sample File Upload**: Upload representative CSV file for metadata extraction
+2. **Metadata Generation**: Process sample file to detect columns, formats, and patterns
+3. **Mapping Configuration**: Configure source-specific column mappings using auto-detected metadata
+4. **Validation**: Multi-level validation (structural, format, data conversion, file testing)
+5. **Data File Upload**: Upload actual financial data files for processing
+6. **Robust CSV Parsing**: 
+   - Automatic encoding detection (UTF-8, UTF-8-BOM, etc.)
+   - Flexible header location detection using metadata patterns
+   - Malformed row filtering with comprehensive error logging
+   - Metadata-driven validation rules
+7. **Data Transformation**: Apply mappings to normalize data structure
+8. **Year/Month Organization**: Automatically group transactions by year and month
+9. **CSV Generation**: Create standardized output files with source tracking
+10. **Preview & Download**: View processed data and download monthly files
 
 ### Output Organization
 Each data source follows the structure:
 ```
-{Source}/output/{Year}/{MM_YYYY}.csv
+data/{source}/
+├── input/                     # Uploaded raw files
+│   └── *.csv
+└── output/                    # Processed monthly files
+    └── {Year}/
+        └── {MM_YYYY}.csv
 ```
 
 Example:
 ```
-BankOfAmerica/output/2024/01_2024.csv
+data/bankofamerica/output/2024/01_2024.csv
 ├── Date, Description, Amount, Source File
 ├── 01/15/2024, VERIZON WIRELESS, -421.50, boa_statement_2024.csv
 ├── 01/20/2024, VERIZON WIRELESS, -301.93, boa_statement_2024.csv
 └── 01/25/2024, GROCERY STORE, -45.67, boa_statement_2024.csv
+
+data/chase/output/2023/12_2023.csv
+├── Date, Description, Amount, Type, Source File
+├── 12/30/2022, ORIG CO NAME:BANKCARD..., 263.92, ACH_CREDIT, chase_activity.csv
+└── 12/29/2022, Online Transfer to CHK..., -15000.00, ACCT_XFER, chase_activity.csv
+```
+
+### Source Metadata Organization
+```
+data/source_metadata/
+├── bankofamerica/
+│   └── metadata.json          # Column info, patterns, sample data
+├── chase/
+│   └── metadata.json
+└── {source_id}/
+    └── metadata.json
 ```
 
 ## Development Phases
@@ -142,54 +191,77 @@ BankOfAmerica/output/2024/01_2024.csv
 ### Phase 1: Core Infrastructure ✅
 - [x] Set up project structure and development environment
 - [x] Implement basic file system operations
-- [x] Create data processing engine
-- [x] Build basic API endpoints
+- [x] Create data processing engine with source-specific parsing
+- [x] Build basic API endpoints with FastAPI
 - [x] Implement file upload and management
-- [x] Add data processing capabilities
+- [x] Add data processing capabilities with year/month organization
 - [x] Create web interface with source-specific pages
 
 ### Phase 2: Frontend Development ✅
 - [x] Create FastAPI application with Jinja2 templates
 - [x] Implement file upload functionality with Bootstrap styling
-- [x] Build processing status dashboard with real-time updates
+- [x] Build processing status dashboard with real-time updates via WebSocket
 - [x] Add data visualization components with Chart.js
 - [x] Implement source-specific navigation and pages
 - [x] Add file preview and download functionality
 - [x] Create responsive design with mobile support
+- [x] Implement drag-drop file upload zones
 
 ### Phase 3: Advanced Features ✅
 - [x] Implement real-time processing updates via WebSocket
-- [x] Add file validation and error handling
+- [x] Add comprehensive file validation with multi-level checks
 - [x] Create file backup and restoration system
-- [x] Implement rate limiting and security measures
+- [x] Implement rate limiting and security measures (slowapi)
 - [x] Add comprehensive logging and monitoring
-- [x] Create health check endpoints
-- [x] Implement file preview functionality
-- [x] **Enhanced Source Mapping System** (see `docs/mapping_technical_spec.md`)
-- [x] **Persistent Metadata Management** (see `docs/mapping_design.md`)
-- [x] **Multi-Level Validation System** (see `docs/VALIDATION_SYSTEM.md`)
+- [x] Create health check endpoints with detailed metrics
+- [x] Implement file preview functionality (first 50 rows and full file)
+- [x] **Enhanced Source Mapping System** with JSON configuration (see `docs/mapping_technical_spec.md`)
+- [x] **Persistent Metadata Management** with auto-loading (see `docs/mapping_design.md`)
+- [x] **Multi-Level Validation System** with comprehensive testing (see `docs/VALIDATION_SYSTEM.md`)
+- [x] **Robust CSV Decoder** with enterprise-grade parsing (see `docs/VALIDATION_SYSTEM.md`)
 - [x] **Settings Restore Functionality** with full configuration backup
 - [x] **Improved UI/UX** with balanced layouts and professional styling
+- [x] **PDF Processing** for merchant statements (GG, AR sources)
+- [x] **CLI Validation Tool** for batch processing and automation
+- [x] **Flexible Header Matching** for variant file formats
+- [x] **Automatic Encoding Detection** (UTF-8, UTF-8-BOM, etc.)
 
 ### Phase 4: Production Deployment 📋
-- [ ] Set up production infrastructure
-- [ ] Implement monitoring and logging
-- [ ] Performance optimization
-- [ ] Security hardening
+- [ ] Set up production infrastructure (Docker, Kubernetes)
+- [ ] Implement comprehensive monitoring and alerting
+- [ ] Performance optimization and load testing
+- [ ] Security hardening and penetration testing
+- [ ] CI/CD pipeline setup
+- [ ] Cloud storage integration (AWS S3, Google Cloud Storage)
+- [ ] Automated backup and disaster recovery
 
 ## Deployment Architecture
 
 ### Development Environment
-- **Frontend**: FastAPI with Jinja2 templates (localhost:8000)
-- **Backend**: FastAPI with Uvicorn (localhost:8000)
-- **File Storage**: Local file system
-- **Database**: SQLite (development)
+- **Application**: FastAPI with Jinja2 templates (localhost:8000)
+- **Server**: Uvicorn ASGI server with auto-reload
+- **File Storage**: Local file system in `data/` directory
+- **Configuration**: Local environment variables via `scripts/backend.env`
+- **Logging**: Console and file logging to `logs/` directory
 
-### Production Environment
+### Staging Environment (Planned)
+- **Application**: Containerized FastAPI (Docker)
+- **Server**: Uvicorn with multiple workers
+- **File Storage**: Persistent volumes or cloud storage
+- **Configuration**: Environment-specific settings
+- **Logging**: Centralized logging with log aggregation
+
+### Production Environment (Planned)
 - **Frontend**: FastAPI with Jinja2 templates (server-side rendered)
-- **Backend**: Containerized FastAPI (Docker, Kubernetes)
-- **File Storage**: Cloud storage (AWS S3, Google Cloud Storage)
-- **Database**: SQLite (administrative data only, stored with application)
+- **Backend**: Containerized FastAPI (Docker + Kubernetes)
+- **Load Balancing**: Nginx or cloud load balancer
+- **File Storage**: Cloud storage (AWS S3, Google Cloud Storage) with local caching
+- **Database**: SQLite for admin data (or PostgreSQL for multi-user)
+- **Configuration**: Kubernetes ConfigMaps and Secrets
+- **Monitoring**: Prometheus + Grafana
+- **Logging**: ELK Stack or cloud logging service
+- **Backup**: Automated backups to cloud storage
+- **CDN**: CloudFlare or AWS CloudFront for static assets
 
 ## Security & Performance
 
@@ -228,13 +300,72 @@ BankOfAmerica/output/2024/01_2024.csv
 ## Testing Strategy
 
 ### Testing Coverage
-- **Unit Testing**: pytest for API endpoints and business logic
-- **Integration Testing**: httpx for endpoint testing
-- **Frontend Testing**: Manual testing with browser automation
-- **Performance Testing**: Load testing with Artillery or k6
-- **Security Testing**: Vulnerability scanning and penetration testing
-- **Accessibility Testing**: WCAG compliance validation
-- **Cross-browser Testing**: Multiple browser compatibility
+- **Unit Testing**: pytest for services, utilities, and business logic
+  - File service tests
+  - CSV loader tests (20+ comprehensive tests)
+  - Validation service tests
+  - Processing service tests
+- **Integration Testing**: httpx for API endpoint testing
+  - Health check endpoints
+  - File upload/download endpoints
+  - Processing endpoints
+  - Mapping configuration endpoints
+- **Manual Testing**: Browser testing for UI/UX validation
+- **CLI Testing**: Command-line validation tools for automation
+
+### Running Tests
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run specific test file
+pytest tests/test_csv_loader.py -v
+
+# Run specific test
+pytest tests/test_csv_loader.py::TestRobustCSVLoader::test_csv_with_metadata_validation -v
+
+# Run with coverage
+pytest tests/ --cov=app --cov-report=html
+
+# Run only fast tests (exclude slow integration tests)
+pytest tests/ -m "not slow" -v
+```
+
+### Test Categories
+1. **Basic Functionality Tests** (`test_basic.py`)
+   - Health check endpoints
+   - API info endpoints
+   - Source listing
+   - Basic CRUD operations
+
+2. **CSV Loader Tests** (`test_csv_loader.py`)
+   - Standard CSV parsing
+   - Quoted fields handling
+   - Trailing empty columns
+   - Variable header locations
+   - Mixed line endings
+   - Malformed rows
+   - Encoding detection
+   - Metadata-driven validation
+   - Chase-like complex structures
+   - 20 comprehensive test cases
+
+3. **Grouping and Processing Tests** (`test_grouping_removal.py`)
+   - Transaction grouping logic
+   - Month-based organization
+   - Source file tracking
+
+4. **Mapping Tests** (`test_mapping_file_selection.py`)
+   - Column mapping validation
+   - Sample data processing
+   - Configuration persistence
+
+### Testing Best Practices
+- **Isolation**: Each test is independent and can run in any order
+- **Mock Data**: Use temporary files and mock loggers for testing
+- **Comprehensive Coverage**: Tests cover edge cases and error conditions
+- **Real-World Scenarios**: Tests based on actual Chase and BoA file formats
+- **Cleanup**: Automatic cleanup of temporary test files
 
 ## Error Handling & Recovery
 
@@ -252,25 +383,60 @@ BankOfAmerica/output/2024/01_2024.csv
 ## Data Management
 
 ### Backup Strategy
-- **File System**: Automated daily backups of processed data
-- **Database**: SQLite database backup with versioning
-- **Configuration**: Environment-specific configuration backups
-- **Recovery**: Point-in-time recovery capabilities
-- **Source Mappings**: JSON configuration files with version control
-- **Sample Data Metadata**: Persistent storage in `data/source_metadata/`
+- **File System**: Manual and automated backups of processed data
+- **Configuration**: JSON configuration files with version control support
+- **Recovery**: Point-in-time recovery capabilities via file system
+- **Source Mappings**: JSON configuration files in `config/` directory with sample templates
+- **Sample Data Metadata**: Persistent storage in `data/source_metadata/` with automatic backups
 
 ### Data Retention
-- **Input Files**: Configurable retention period (default: 1 year)
-- **Output Files**: Permanent retention with versioning
-- **Processing Logs**: 90-day retention for administrative logs
-- **Sample Data**: Retained for mapping configuration and validation
+- **Input Files**: User-managed retention in `data/{source}/input/`
+- **Output Files**: Permanent retention in `data/{source}/output/{year}/` until manually deleted
+- **Processing Logs**: Configurable retention in `logs/` directory (default: 90 days)
+- **Sample Metadata**: Retained indefinitely in `data/source_metadata/` for mapping configuration
+- **Configuration Backups**: Stored in `backups/` directory with timestamp
 
 ### Data Protection
-- **Encryption at Rest**: Encrypt sensitive files
-- **Access Logging**: Log all file access
-- **Audit Trail**: Track all operations
-- **Data Retention**: Configurable retention policies
-- **Privacy**: All user data excluded from version control
+- **File System Isolation**: All user data stored separately from application code
+- **Access Logging**: Comprehensive logging of all file operations
+- **Audit Trail**: Processing history and job tracking
+- **Privacy**: All user data, logs, and configurations excluded from version control via `.gitignore`
+- **Configuration Templates**: Sample configurations provided, actual configs excluded
+- **Secure File Handling**: Path traversal prevention and file type validation
+
+### File Organization
+```
+rest_finance/
+├── data/                           # User data (excluded from git)
+│   ├── source_metadata/           # Persistent metadata storage
+│   │   ├── bankofamerica/
+│   │   │   └── metadata.json
+│   │   ├── chase/
+│   │   │   └── metadata.json
+│   │   └── {source_id}/
+│   │       └── metadata.json
+│   ├── bankofamerica/
+│   │   ├── input/                 # Uploaded raw files
+│   │   └── output/                # Processed files by year/month
+│   ├── chase/
+│   │   ├── input/
+│   │   └── output/
+│   └── {source}/
+│       ├── input/
+│       └── output/
+├── config/                         # Source mappings (tracked in git)
+│   ├── bankofamerica.json
+│   ├── chase.json
+│   ├── settings_sample.py         # Sample configuration
+│   └── settings.py                # Actual config (excluded from git)
+├── backups/                        # Configuration backups (excluded from git)
+├── logs/                           # Application logs (excluded from git)
+└── scripts/                        # Utility scripts
+    ├── manage_backend.sh
+    ├── manage_frontend.sh
+    ├── extract_pdf_table.py
+    └── backend.env                # Actual env (excluded from git)
+```
 
 ## Monitoring & Alerting
 
@@ -316,19 +482,35 @@ BankOfAmerica/output/2024/01_2024.csv
 ## Future Enhancements
 
 ### Planned Features
-1. **Machine Learning**: Automated transaction categorization
-2. **Advanced Analytics**: Enhanced reporting and insights
-3. **Multi-tenant Support**: Multiple organization support
+1. **Machine Learning**: Automated transaction categorization and anomaly detection
+2. **Advanced Analytics**: Enhanced reporting with trend analysis and forecasting
+3. **Multi-tenant Support**: Multiple organization/user support with role-based access
 4. **API Integration**: Banking API connections for automatic imports
-5. **Mobile Application**: React Native mobile app
-6. **Cloud Synchronization**: Real-time cross-device sync
+5. **Mobile Application**: Native mobile apps (iOS/Android) or enhanced PWA
+6. **Cloud Synchronization**: Real-time cross-device sync with cloud storage
+7. **Scheduled Processing**: Automated processing on schedule (daily, weekly, monthly)
+8. **Email Notifications**: Processing completion alerts and error notifications
+9. **Advanced Filtering**: Complex query builder for data analysis
+10. **Data Export**: Multiple export formats (Excel, PDF, JSON)
 
 ### Technical Improvements
-1. **Microservices Architecture**: Service decomposition
-2. **Event Sourcing**: Event-driven architecture with Celery
-3. **CQRS Pattern**: Separate read/write operations
-4. **GraphQL API**: Flexible data querying with Strawberry
-5. **Real-time Collaboration**: Multi-user capabilities
+1. **Microservices Architecture**: Service decomposition for scalability
+2. **Event Sourcing**: Event-driven architecture with Celery for background jobs
+3. **CQRS Pattern**: Separate read/write operations for performance
+4. **GraphQL API**: Flexible data querying alongside REST API
+5. **Real-time Collaboration**: Multi-user capabilities with WebSocket
+6. **Database Migration**: PostgreSQL for production with SQLAlchemy migrations
+7. **Container Orchestration**: Kubernetes deployment with auto-scaling
+8. **Caching Layer**: Redis for improved performance
+9. **Search Engine**: Elasticsearch for advanced search capabilities
+10. **Monitoring & Observability**: Prometheus + Grafana for metrics and alerting
+
+### Performance Enhancements
+1. **Parallel Processing**: Multi-threaded file processing for large datasets
+2. **Streaming Processing**: Handle very large files without loading entirely into memory
+3. **Incremental Processing**: Process only new/changed data
+4. **CDN Integration**: Serve static assets from CDN in production
+5. **Database Indexing**: Optimize queries for faster data retrieval
 
 ## Documentation Structure
 
@@ -346,8 +528,8 @@ This project documentation is organized into several documents:
 
 ### Prerequisites
 - Python 3.10+
-- Node.js (for development tools)
 - Git
+- 10MB+ disk space for dependencies
 
 ### Installation
 ```bash
@@ -358,14 +540,68 @@ cd rest_finance
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Run the development server
+# Optional: Set up configuration
+cp scripts/backend.env.example scripts/backend.env
+# Edit scripts/backend.env with your settings
+```
+
+### Running the Application
+
+#### Option 1: Using the management script (recommended)
+```bash
+# Start backend in background
+bash scripts/manage_backend.sh start -b
+
+# Or start in foreground (for development)
+bash scripts/manage_backend.sh start
+
+# Check status
+bash scripts/manage_backend.sh status
+
+# View logs
+bash scripts/manage_backend.sh logs
+
+# Stop the service
+bash scripts/manage_backend.sh stop
+```
+
+#### Option 2: Direct execution
+```bash
+# Run the application directly
+python main.py
+
+# Or use uvicorn directly
 uvicorn app.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Access the Application
 - **Main Application**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/api/docs
-- **Alternative API Docs**: http://localhost:8000/api/redoc
+- **API Documentation**: http://localhost:8000/api/docs (in debug mode)
+- **Alternative API Docs**: http://localhost:8000/api/redoc (in debug mode)
+- **Health Check**: http://localhost:8000/api/health
+
+### First Steps
+1. Navigate to http://localhost:8000
+2. Select a data source from the sidebar (e.g., Bank of America, Chase)
+3. Upload a sample CSV file to generate metadata
+4. Configure column mappings (or use auto-detected settings)
+5. Upload your data files
+6. Process files and download monthly outputs
+
+### CLI Tools
+```bash
+# Validate CSV files from command line
+python3 tools/csv_validator.py data/chase/input/file.csv --source chase --verbose
+
+# Extract PDF merchant statements
+python3 scripts/extract_pdf_table.py --pdf data/gg/input/Jan2025.pdf --vendor gg --year 2025
+
+# Run tests
+pytest tests/ -v
+
+# Run specific test file
+pytest tests/test_csv_loader.py -v
+```
 
 ## Contributing
 

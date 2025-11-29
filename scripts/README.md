@@ -2,6 +2,52 @@
 
 This directory contains management scripts for starting, stopping, and monitoring the Financial Data Processor backend and frontend services.
 
+## 🚀 Quick Start (Recommended)
+
+### Unified Management Script (`../manage.sh`)
+**NEW!** Use the unified script in the root directory to control both services together:
+
+```bash
+# Start entire system (backend + frontend)
+./manage.sh start
+
+# Check status
+./manage.sh status
+
+# Stop all services
+./manage.sh stop
+```
+
+**Service URLs:**
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
+
+### Common Commands
+
+```bash
+./manage.sh start              # Start both services in background
+./manage.sh start -f            # Start both services in foreground
+./manage.sh stop                # Stop all services
+./manage.sh restart             # Restart all services
+./manage.sh status              # Show status of all services
+./manage.sh logs                # View combined logs from both services
+
+# Individual service control
+./manage.sh start-backend       # Start backend only
+./manage.sh start-frontend      # Start frontend only
+./manage.sh stop-backend        # Stop backend only
+./manage.sh stop-frontend       # Stop frontend only
+./manage.sh restart-backend     # Restart backend only
+./manage.sh restart-frontend    # Restart frontend only
+
+# Utility commands
+./manage.sh open                # Open application in browser
+./manage.sh logs-backend        # Show backend logs only
+./manage.sh logs-frontend       # Show frontend logs only
+./manage.sh help                # Show detailed help
+```
+
 ## Scripts Overview
 
 ### Backend Management

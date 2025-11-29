@@ -12,6 +12,11 @@ from pathlib import Path
 
 from app.config import settings
 from app.utils.logging import processing_logger
+from app.exceptions import (
+    handle_service_errors,
+    InvalidSourceError,
+    FileNotFoundError as AppFileNotFoundError
+)
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
@@ -54,12 +59,16 @@ SOURCE_CONFIGS = {
 def get_source_config(source_slug: str) -> dict:
     """Get source configuration by slug."""
     if source_slug not in SOURCE_CONFIGS:
-        raise HTTPException(status_code=404, detail=f"Source '{source_slug}' not found")
+        raise InvalidSourceError(
+            f"Source '{source_slug}' not found",
+            {"source": source_slug, "available": list(SOURCE_CONFIGS.keys())}
+        )
     return SOURCE_CONFIGS[source_slug]
 
 
 @router.get("/{source}/group-by-description")
 @limiter.limit(settings.rate_limit_api)
+@handle_service_errors
 async def analytics_group_by_description(
     source: str,
     request: Request,
@@ -67,56 +76,48 @@ async def analytics_group_by_description(
     filePath: str = Query(..., description="Path to the file")
 ):
     """Group data by description and provide summary statistics."""
-    try:
-        source_config = get_source_config(source)
-        source_enum = source_config["name"]
-        
-        # Load the file data
-        df = await load_file_data(source_enum, fileType, filePath)
-        
-        # Group by description
-        description_groups = df.groupby('Description').agg({
-            'Amount': ['count', 'sum', 'mean', 'min', 'max']
-        }).round(2)
-        
-        # Flatten column names
-        description_groups.columns = ['count', 'total_amount', 'average_amount', 'min_amount', 'max_amount']
-        description_groups = description_groups.reset_index()
-        
-        # Convert to list of dictionaries
-        groups = []
-        for _, row in description_groups.iterrows():
-            groups.append({
-                'description': row['Description'],
-                'count': int(row['count']),
-                'total_amount': float(row['total_amount']),
-                'average_amount': float(row['average_amount']),
-                'min_amount': float(row['min_amount']),
-                'max_amount': float(row['max_amount'])
-            })
-        
-        # Sort by total amount descending
-        groups.sort(key=lambda x: x['total_amount'], reverse=True)
-        
-        return {
-            "source": source_enum,
-            "file_type": fileType,
-            "file_path": filePath,
-            "groups": groups,
-            "total_groups": len(groups)
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        processing_logger.log_system_event(
-            f"Error in group by description analytics for {source}: {str(e)}", level="error"
-        )
-        raise HTTPException(status_code=500, detail=str(e))
+    source_config = get_source_config(source)
+    source_enum = source_config["name"]
+    
+    # Load the file data
+    df = await load_file_data(source_enum, fileType, filePath)
+    
+    # Group by description
+    description_groups = df.groupby('Description').agg({
+        'Amount': ['count', 'sum', 'mean', 'min', 'max']
+    }).round(2)
+    
+    # Flatten column names
+    description_groups.columns = ['count', 'total_amount', 'average_amount', 'min_amount', 'max_amount']
+    description_groups = description_groups.reset_index()
+    
+    # Convert to list of dictionaries
+    groups = []
+    for _, row in description_groups.iterrows():
+        groups.append({
+            'description': row['Description'],
+            'count': int(row['count']),
+            'total_amount': float(row['total_amount']),
+            'average_amount': float(row['average_amount']),
+            'min_amount': float(row['min_amount']),
+            'max_amount': float(row['max_amount'])
+        })
+    
+    # Sort by total amount descending
+    groups.sort(key=lambda x: x['total_amount'], reverse=True)
+    
+    return {
+        "source": source_enum,
+        "file_type": fileType,
+        "file_path": filePath,
+        "groups": groups,
+        "total_groups": len(groups)
+    }
 
 
 @router.get("/{source}/monthly-summary")
 @limiter.limit(settings.rate_limit_api)
+@handle_service_errors
 async def analytics_monthly_summary(
     source: str,
     request: Request,
@@ -124,70 +125,62 @@ async def analytics_monthly_summary(
     filePath: str = Query(..., description="Path to the file")
 ):
     """Provide monthly summary statistics."""
-    try:
-        source_config = get_source_config(source)
-        source_enum = source_config["name"]
-        
-        # Load the file data
-        df = await load_file_data(source_enum, fileType, filePath)
-        
-        # Convert date column to datetime
-        date_column = get_date_column(source_enum)
-        df[date_column] = pd.to_datetime(df[date_column])
-        
-        # Group by month
-        df['month'] = df[date_column].dt.to_period('M')
-        monthly_data = df.groupby('month').agg({
-            'Amount': ['sum', 'count']
-        }).round(2)
-        
-        monthly_data.columns = ['amount', 'count']
-        monthly_data = monthly_data.reset_index()
-        
-        # Convert to list of dictionaries with proper type conversion
-        monthly_summary = []
-        for _, row in monthly_data.iterrows():
-            monthly_summary.append({
-                'month': str(row['month']),
-                'amount': float(row['amount']),
-                'count': int(row['count'])
-            })
-        
-        # Calculate summary statistics with proper type conversion
-        total_transactions = int(df['Amount'].count())
-        total_amount = float(df['Amount'].sum())
-        average_per_month = float(total_amount / len(monthly_summary)) if monthly_summary else 0.0
-        
-        # Find highest and lowest months
-        if monthly_summary:
-            highest_month = max(monthly_summary, key=lambda x: x['amount'])
-            lowest_month = min(monthly_summary, key=lambda x: x['amount'])
-        else:
-            highest_month = lowest_month = None
-        
-        return {
-            "source": source_enum,
-            "file_type": fileType,
-            "file_path": filePath,
-            "monthly_data": monthly_summary,
-            "total_transactions": total_transactions,
-            "total_amount": total_amount,
-            "average_per_month": average_per_month,
-            "highest_month": str(highest_month['month']) if highest_month else None,
-            "lowest_month": str(lowest_month['month']) if lowest_month else None
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        processing_logger.log_system_event(
-            f"Error in monthly summary analytics for {source}: {str(e)}", level="error"
-        )
-        raise HTTPException(status_code=500, detail=str(e))
+    source_config = get_source_config(source)
+    source_enum = source_config["name"]
+    
+    # Load the file data
+    df = await load_file_data(source_enum, fileType, filePath)
+    
+    # Convert date column to datetime
+    date_column = get_date_column(source_enum)
+    df[date_column] = pd.to_datetime(df[date_column])
+    
+    # Group by month
+    df['month'] = df[date_column].dt.to_period('M')
+    monthly_data = df.groupby('month').agg({
+        'Amount': ['sum', 'count']
+    }).round(2)
+    
+    monthly_data.columns = ['amount', 'count']
+    monthly_data = monthly_data.reset_index()
+    
+    # Convert to list of dictionaries with proper type conversion
+    monthly_summary = []
+    for _, row in monthly_data.iterrows():
+        monthly_summary.append({
+            'month': str(row['month']),
+            'amount': float(row['amount']),
+            'count': int(row['count'])
+        })
+    
+    # Calculate summary statistics with proper type conversion
+    total_transactions = int(df['Amount'].count())
+    total_amount = float(df['Amount'].sum())
+    average_per_month = float(total_amount / len(monthly_summary)) if monthly_summary else 0.0
+    
+    # Find highest and lowest months
+    if monthly_summary:
+        highest_month = max(monthly_summary, key=lambda x: x['amount'])
+        lowest_month = min(monthly_summary, key=lambda x: x['amount'])
+    else:
+        highest_month = lowest_month = None
+    
+    return {
+        "source": source_enum,
+        "file_type": fileType,
+        "file_path": filePath,
+        "monthly_data": monthly_summary,
+        "total_transactions": total_transactions,
+        "total_amount": total_amount,
+        "average_per_month": average_per_month,
+        "highest_month": str(highest_month['month']) if highest_month else None,
+        "lowest_month": str(lowest_month['month']) if lowest_month else None
+    }
 
 
 @router.get("/{source}/amount-analysis")
 @limiter.limit(settings.rate_limit_api)
+@handle_service_errors
 async def analytics_amount_analysis(
     source: str,
     request: Request,
@@ -195,67 +188,59 @@ async def analytics_amount_analysis(
     filePath: str = Query(..., description="Path to the file")
 ):
     """Provide amount analysis including distribution and statistics."""
-    try:
-        source_config = get_source_config(source)
-        source_enum = source_config["name"]
-        
-        # Load the file data
-        df = await load_file_data(source_enum, fileType, filePath)
-        
-        # Calculate basic statistics
-        amounts = df['Amount']
-        mean = amounts.mean()
-        median = amounts.median()
-        std_dev = amounts.std()
-        min_amount = amounts.min()
-        max_amount = amounts.max()
-        count = len(amounts)
-        
-        # Create amount distribution (bins)
-        bins = pd.cut(amounts, bins=10)
-        distribution = bins.value_counts().sort_index()
-        
-        distribution_data = []
-        for bin_name, count in distribution.items():
-            distribution_data.append({
-                'range': str(bin_name),
-                'count': int(count)
-            })
-        
-        # Create amount ranges for pie chart
-        ranges = [
-            {'range': 'Very Low (< $10)', 'count': int(len(amounts[amounts < 10]))},
-            {'range': 'Low ($10 - $50)', 'count': int(len(amounts[(amounts >= 10) & (amounts < 50)]))},
-            {'range': 'Medium ($50 - $200)', 'count': int(len(amounts[(amounts >= 50) & (amounts < 200)]))},
-            {'range': 'High ($200 - $1000)', 'count': int(len(amounts[(amounts >= 200) & (amounts < 1000)]))},
-            {'range': 'Very High (> $1000)', 'count': int(len(amounts[amounts >= 1000]))}
-        ]
-        
-        return {
-            "source": source_enum,
-            "file_type": fileType,
-            "file_path": filePath,
-            "mean": float(mean),
-            "median": float(median),
-            "std_dev": float(std_dev),
-            "min": float(min_amount),
-            "max": float(max_amount),
-            "count": count,
-            "distribution": distribution_data,
-            "ranges": ranges
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        processing_logger.log_system_event(
-            f"Error in amount analysis for {source}: {str(e)}", level="error"
-        )
-        raise HTTPException(status_code=500, detail=str(e))
+    source_config = get_source_config(source)
+    source_enum = source_config["name"]
+    
+    # Load the file data
+    df = await load_file_data(source_enum, fileType, filePath)
+    
+    # Calculate basic statistics
+    amounts = df['Amount']
+    mean = amounts.mean()
+    median = amounts.median()
+    std_dev = amounts.std()
+    min_amount = amounts.min()
+    max_amount = amounts.max()
+    count = len(amounts)
+    
+    # Create amount distribution (bins)
+    bins = pd.cut(amounts, bins=10)
+    distribution = bins.value_counts().sort_index()
+    
+    distribution_data = []
+    for bin_name, count in distribution.items():
+        distribution_data.append({
+            'range': str(bin_name),
+            'count': int(count)
+        })
+    
+    # Create amount ranges for pie chart
+    ranges = [
+        {'range': 'Very Low (< $10)', 'count': int(len(amounts[amounts < 10]))},
+        {'range': 'Low ($10 - $50)', 'count': int(len(amounts[(amounts >= 10) & (amounts < 50)]))},
+        {'range': 'Medium ($50 - $200)', 'count': int(len(amounts[(amounts >= 50) & (amounts < 200)]))},
+        {'range': 'High ($200 - $1000)', 'count': int(len(amounts[(amounts >= 200) & (amounts < 1000)]))},
+        {'range': 'Very High (> $1000)', 'count': int(len(amounts[amounts >= 1000]))}
+    ]
+    
+    return {
+        "source": source_enum,
+        "file_type": fileType,
+        "file_path": filePath,
+        "mean": float(mean),
+        "median": float(median),
+        "std_dev": float(std_dev),
+        "min": float(min_amount),
+        "max": float(max_amount),
+        "count": count,
+        "distribution": distribution_data,
+        "ranges": ranges
+    }
 
 
 @router.get("/{source}/trends")
 @limiter.limit(settings.rate_limit_api)
+@handle_service_errors
 async def analytics_trends(
     source: str,
     request: Request,
@@ -263,69 +248,60 @@ async def analytics_trends(
     filePath: str = Query(..., description="Path to the file")
 ):
     """Provide trend analysis over time."""
-    try:
-        source_config = get_source_config(source)
-        source_enum = source_config["name"]
+    source_config = get_source_config(source)
+    source_enum = source_config["name"]
+    
+    # Load the file data
+    df = await load_file_data(source_enum, fileType, filePath)
+    
+    # Convert date column to datetime
+    date_column = get_date_column(source_enum)
+    df[date_column] = pd.to_datetime(df[date_column])
+    
+    # Group by month and calculate trends
+    df['month'] = df[date_column].dt.to_period('M')
+    monthly_trends = df.groupby('month')['Amount'].sum().reset_index()
+    
+    # Convert to list of dictionaries with proper type conversion
+    trend_data = []
+    for _, row in monthly_trends.iterrows():
+        trend_data.append({
+            'month': str(row['month']),
+            'amount': float(row['Amount'])
+        })
+    
+    # Calculate trend direction and growth rate
+    if len(trend_data) >= 2:
+        first_amount = float(trend_data[0]['amount'])
+        last_amount = float(trend_data[-1]['amount'])
         
-        # Load the file data
-        df = await load_file_data(source_enum, fileType, filePath)
-        
-        # Convert date column to datetime
-        date_column = get_date_column(source_enum)
-        df[date_column] = pd.to_datetime(df[date_column])
-        
-        # Group by month and calculate trends
-        df['month'] = df[date_column].dt.to_period('M')
-        monthly_trends = df.groupby('month')['Amount'].sum().reset_index()
-        
-        # Convert to list of dictionaries with proper type conversion
-        trend_data = []
-        for _, row in monthly_trends.iterrows():
-            trend_data.append({
-                'month': str(row['month']),
-                'amount': float(row['Amount'])
-            })
-        
-        # Calculate trend direction and growth rate
-        if len(trend_data) >= 2:
-            first_amount = float(trend_data[0]['amount'])
-            last_amount = float(trend_data[-1]['amount'])
-            
-            if first_amount != 0:
-                growth_rate = float(((last_amount - first_amount) / abs(first_amount)) * 100)
-            else:
-                growth_rate = 0.0
-                
-            trend_direction = "Increasing" if growth_rate > 0 else "Decreasing" if growth_rate < 0 else "Stable"
+        if first_amount != 0:
+            growth_rate = float(((last_amount - first_amount) / abs(first_amount)) * 100)
         else:
             growth_rate = 0.0
-            trend_direction = "Insufficient Data"
-        
-        # Find peak and lowest months
-        if trend_data:
-            peak_month = max(trend_data, key=lambda x: x['amount'])
-            lowest_month = min(trend_data, key=lambda x: x['amount'])
-        else:
-            peak_month = lowest_month = None
-        
-        return {
-            "source": source_enum,
-            "file_type": fileType,
-            "file_path": filePath,
-            "trend_data": trend_data,
-            "trend_direction": trend_direction,
-            "growth_rate": round(growth_rate, 2),
-            "peak_month": str(peak_month['month']) if peak_month else None,
-            "lowest_month": str(lowest_month['month']) if lowest_month else None
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        processing_logger.log_system_event(
-            f"Error in trends analysis for {source}: {str(e)}", level="error"
-        )
-        raise HTTPException(status_code=500, detail=str(e))
+            
+        trend_direction = "Increasing" if growth_rate > 0 else "Decreasing" if growth_rate < 0 else "Stable"
+    else:
+        growth_rate = 0.0
+        trend_direction = "Insufficient Data"
+    
+    # Find peak and lowest months
+    if trend_data:
+        peak_month = max(trend_data, key=lambda x: x['amount'])
+        lowest_month = min(trend_data, key=lambda x: x['amount'])
+    else:
+        peak_month = lowest_month = None
+    
+    return {
+        "source": source_enum,
+        "file_type": fileType,
+        "file_path": filePath,
+        "trend_data": trend_data,
+        "trend_direction": trend_direction,
+        "growth_rate": round(growth_rate, 2),
+        "peak_month": str(peak_month['month']) if peak_month else None,
+        "lowest_month": str(lowest_month['month']) if lowest_month else None
+    }
 
 
 async def load_file_data(source_enum: str, file_type: str, file_path: str):
@@ -391,7 +367,10 @@ async def load_file_data(source_enum: str, file_type: str, file_path: str):
                 f"Directory does not exist: {parent_dir}",
                 level="info"
             )
-        raise HTTPException(status_code=404, detail=f"File not found: {file_path_obj}")
+        raise AppFileNotFoundError(
+            f"File not found: {file_path_obj}",
+            {"file_path": str(file_path_obj), "source": source_enum, "file_type": file_type}
+        )
 
     # Load CSV data
     df = pd.read_csv(file_path_obj)

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 from enum import Enum
+from functools import lru_cache
 
 from app.config.settings import settings
 
@@ -330,13 +331,18 @@ class SourceMappingManager:
         # Use settings to get the config directory path
         self.config_dir = settings.config_path
         self.mappings = self._load_mappings()
+        self._cache_version = 0  # Track cache invalidation
     
     def _load_mappings(self) -> Dict[str, SourceMappingConfig]:
         """Load mappings from JSON files in config directory."""
         mappings = DEFAULT_SOURCE_MAPPINGS.copy()
         
         if not self.config_dir.exists():
-            print(f"Warning: Config directory {self.config_dir} does not exist")
+            from app.utils.logging import processing_logger
+            processing_logger.log_system_event(
+                f"Config directory does not exist: {self.config_dir}",
+                level="warning"
+            )
             return mappings
         
         for config_file in self.config_dir.glob("*.json"):
@@ -346,9 +352,13 @@ class SourceMappingManager:
                     data = json.load(f)
                     mapping = SourceMappingConfig(**data)
                     mappings[source_id.lower()] = mapping
-                    print(f"Loaded mapping for {source_id} from {config_file}")
             except Exception as e:
-                print(f"Warning: Failed to load mapping from {config_file}: {e}")
+                from app.utils.logging import processing_logger
+                processing_logger.log_system_event(
+                    f"Failed to load mapping from {config_file}: {e}",
+                    level="error",
+                    details={"config_file": str(config_file), "error": str(e)}
+                )
         
         return mappings
     
@@ -362,7 +372,11 @@ class SourceMappingManager:
             with open(config_file, 'w') as f:
                 json.dump(mapping.dict(), f, indent=2)
         except Exception as e:
-            print(f"Warning: Failed to save mapping to {config_file}: {e}")
+            from app.utils.logging import processing_logger
+            processing_logger.log_system_event(
+                f"Failed to save mapping to {config_file}: {e}",
+                level="error"
+            )
     
     def _delete_mapping_file(self, source_id: str) -> None:
         """Delete a mapping JSON file."""
@@ -371,27 +385,72 @@ class SourceMappingManager:
             try:
                 config_file.unlink()
             except Exception as e:
-                print(f"Warning: Failed to delete mapping file {config_file}: {e}")
+                from app.utils.logging import processing_logger
+                processing_logger.log_system_event(
+                    f"Failed to delete mapping file {config_file}: {e}",
+                    level="error"
+                )
+    
+    @lru_cache(maxsize=128)
+    def _get_cached_mapping(self, source_id: str, cache_version: int) -> Optional[SourceMappingConfig]:
+        """
+        Get cached mapping configuration.
+        
+        Args:
+            source_id: Source identifier
+            cache_version: Version number for cache invalidation
+            
+        Returns:
+            Mapping configuration or None
+        """
+        return self.mappings.get(source_id.lower())
     
     def get_mapping(self, source_id: str) -> Optional[SourceMappingConfig]:
-        """Get mapping configuration for a source."""
-        return self.mappings.get(source_id.lower())
+        """
+        Get mapping configuration for a source with caching.
+        
+        Args:
+            source_id: Source identifier
+            
+        Returns:
+            Mapping configuration or None
+        """
+        return self._get_cached_mapping(source_id, self._cache_version)
     
     def get_all_mappings(self) -> Dict[str, SourceMappingConfig]:
         """Get all mapping configurations."""
         return self.mappings.copy()
     
     def add_mapping(self, mapping: SourceMappingConfig) -> None:
-        """Add or update a mapping configuration."""
+        """
+        Add or update a mapping configuration.
+        
+        Args:
+            mapping: Mapping configuration to add/update
+        """
         self.mappings[mapping.source_id.lower()] = mapping
         self._save_mapping(mapping)
+        # Invalidate cache
+        self._cache_version += 1
+        self._get_cached_mapping.cache_clear()
     
     def remove_mapping(self, source_id: str) -> bool:
-        """Remove a mapping configuration."""
+        """
+        Remove a mapping configuration.
+        
+        Args:
+            source_id: Source identifier
+            
+        Returns:
+            True if mapping was removed
+        """
         source_id_lower = source_id.lower()
         if source_id_lower in self.mappings:
             del self.mappings[source_id_lower]
             self._delete_mapping_file(source_id)
+            # Invalidate cache
+            self._cache_version += 1
+            self._get_cached_mapping.cache_clear()
             return True
         return False
     

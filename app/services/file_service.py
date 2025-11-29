@@ -5,13 +5,21 @@ import shutil
 from pathlib import Path
 from typing import List, Optional
 import aiofiles
-from app.config import settings
-from app.utils.logging import processing_logger
-from app.utils.file_utils import FileUtils
 import asyncio
 import pandas as pd
 import numpy as np
 from datetime import datetime
+
+from app.config import settings
+from app.utils.logging import processing_logger
+from app.utils.file_utils import FileUtils
+from app.constants import LOCK_FILE_PREFIX, LOCK_FILE_SUFFIX
+from app.exceptions import (
+    FileOperationError,
+    FileNotFoundError as AppFileNotFoundError,
+    FileAlreadyExistsError,
+    InvalidFileTypeError
+)
 
 
 class FileService:
@@ -23,20 +31,68 @@ class FileService:
         processing_logger.log_system_event("FileService initialized", {"data_dir": str(self.data_dir)})
     
     async def save_uploaded_file(self, source: str, file, filename: str) -> bool:
-        """Save uploaded file to appropriate directory."""
+        """
+        Save uploaded file to appropriate directory with file locking and validation.
+        
+        Args:
+            source: Source identifier
+            file: Uploaded file object
+            filename: Original filename
+            
+        Returns:
+            True if successful
+            
+        Raises:
+            FileAlreadyExistsError: If file is being processed or exists
+            InvalidFileTypeError: If file content doesn't match extension
+            FileOperationError: If save operation fails
+        """
+        lock_file = None
+        file_path = None
+        
         try:
             # Create source directory if it doesn't exist
             source_dir = self.data_dir / source / "input"
             FileUtils.ensure_directory(source_dir)
             
-            # Sanitize filename
+            # Sanitize filename (prevents path traversal)
             safe_filename = FileUtils.sanitize_filename(filename)
             file_path = source_dir / safe_filename
+            
+            # Check if file already exists
+            if file_path.exists():
+                raise FileAlreadyExistsError(
+                    f"File already exists: {safe_filename}",
+                    {"filename": safe_filename, "source": source}
+                )
+            
+            # Create lock file to prevent concurrent access
+            lock_file = file_path.parent / f"{LOCK_FILE_PREFIX}{safe_filename}{LOCK_FILE_SUFFIX}"
+            
+            # Check if file is being processed
+            if lock_file.exists():
+                raise FileAlreadyExistsError(
+                    f"File is currently being processed: {safe_filename}",
+                    {"filename": safe_filename, "source": source, "locked": True}
+                )
+            
+            # Create lock
+            async with aiofiles.open(lock_file, 'w') as lock:
+                await lock.write(f"Locked by upload at {datetime.now().isoformat()}")
             
             # Save file
             async with aiofiles.open(file_path, 'wb') as f:
                 content = await file.read()
                 await f.write(content)
+            
+            # Validate file content matches extension
+            file_extension = file_path.suffix
+            try:
+                await FileUtils.validate_file_content(file_path, file_extension)
+            except ValueError as e:
+                # Remove invalid file
+                file_path.unlink(missing_ok=True)
+                raise InvalidFileTypeError(str(e), {"filename": safe_filename, "source": source})
             
             # If it's a PDF file, convert it to CSV
             if safe_filename.lower().endswith('.pdf'):
@@ -57,9 +113,38 @@ class FileService:
             processing_logger.log_file_operation("upload", safe_filename, source, True)
             return True
             
-        except Exception as e:
+        except (FileAlreadyExistsError, InvalidFileTypeError):
+            # Re-raise custom exceptions
+            raise
+        except (IOError, PermissionError) as e:
+            # Handle specific I/O errors
+            if file_path and file_path.exists():
+                file_path.unlink(missing_ok=True)
             processing_logger.log_file_operation("upload", filename, source, False, str(e))
-            return False
+            raise FileOperationError(
+                f"Failed to save file: {filename}",
+                {"error": str(e), "source": source, "type": type(e).__name__}
+            )
+        except Exception as e:
+            # Unexpected errors - log and re-raise
+            if file_path and file_path.exists():
+                file_path.unlink(missing_ok=True)
+            processing_logger.log_system_event(
+                f"Unexpected error in file upload: {str(e)}",
+                level="critical",
+                details={"filename": filename, "source": source, "error": str(e)}
+            )
+            raise
+        finally:
+            # Always clean up lock file
+            if lock_file and lock_file.exists():
+                try:
+                    lock_file.unlink()
+                except Exception as e:
+                    processing_logger.log_system_event(
+                        f"Failed to remove lock file: {str(e)}",
+                        level="warning"
+                    )
     
     async def get_source_files(self, source: str) -> List[dict]:
         """Get list of files for a source with file information."""
@@ -82,18 +167,48 @@ class FileService:
         return files
     
     async def delete_file(self, source: str, filename: str) -> bool:
-        """Delete a file from source directory."""
+        """
+        Delete a file from source directory.
+        
+        Args:
+            source: Source identifier
+            filename: Filename to delete
+            
+        Returns:
+            True if successful
+            
+        Raises:
+            AppFileNotFoundError: If file doesn't exist
+            FileOperationError: If deletion fails
+        """
         try:
             file_path = self.data_dir / source / "input" / filename
-            if file_path.exists():
-                file_path.unlink()
-                processing_logger.log_file_operation("delete", filename, source, True)
-                return True
-            return False
             
-        except Exception as e:
+            if not file_path.exists():
+                raise AppFileNotFoundError(
+                    f"File not found: {filename}",
+                    {"filename": filename, "source": source}
+                )
+            
+            file_path.unlink()
+            processing_logger.log_file_operation("delete", filename, source, True)
+            return True
+            
+        except AppFileNotFoundError:
+            raise
+        except (IOError, PermissionError) as e:
             processing_logger.log_file_operation("delete", filename, source, False, str(e))
-            return False
+            raise FileOperationError(
+                f"Failed to delete file: {filename}",
+                {"error": str(e), "source": source, "type": type(e).__name__}
+            )
+        except Exception as e:
+            processing_logger.log_system_event(
+                f"Unexpected error deleting file: {str(e)}",
+                level="critical",
+                details={"filename": filename, "source": source}
+            )
+            raise
     
     async def get_output_files(self, source: str, year: Optional[int] = None) -> List[str]:
         """Get list of output files for a source."""
