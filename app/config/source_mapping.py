@@ -30,6 +30,7 @@ class ColumnMapping(BaseModel):
     date_format: Optional[str] = Field(default=None, description="Date format if mapping type is date")
     amount_format: Optional[str] = Field(default=None, description="Amount format if mapping type is amount")
     description: Optional[str] = Field(default=None, description="Human-readable description of this column")
+    column_aliases: List[str] = Field(default=[], description="Alternative column names to try if source_column is not present")
 
 
 class SourceMappingConfig(BaseModel):
@@ -77,11 +78,12 @@ DEFAULT_SOURCE_MAPPINGS = {
             description="Transaction date"
         ),
         description_mapping=ColumnMapping(
-            source_column="Original Description",
+            source_column="Description",
             target_field="description",
             mapping_type=MappingType.DESCRIPTION,
             required=True,
-            description="Transaction description"
+            description="Transaction description",
+            column_aliases=["Original Description"]
         ),
         amount_mapping=ColumnMapping(
             source_column="Amount",
@@ -100,11 +102,11 @@ DEFAULT_SOURCE_MAPPINGS = {
                 description="Transaction status"
             )
         ],
-        expected_columns=["Status", "Date", "Original Description", "Amount"],
-        required_columns=["Date", "Original Description", "Amount"],
+        expected_columns=["Status", "Date", "Description", "Amount"],
+        required_columns=["Date", "Description", "Amount"],
         example_data=[
-            {"Status": "Posted", "Date": "01/15/2024", "Original Description": "VERIZON WIRELESS", "Amount": "-421.50"},
-            {"Status": "Posted", "Date": "01/20/2024", "Original Description": "GROCERY STORE", "Amount": "-45.67"}
+            {"Date": "01/15/2024", "Description": "VERIZON WIRELESS", "Amount": "-421.50"},
+            {"Date": "01/20/2024", "Description": "GROCERY STORE", "Amount": "-45.67"}
         ]
     ),
     

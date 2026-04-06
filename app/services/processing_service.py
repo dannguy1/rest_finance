@@ -629,19 +629,35 @@ class DataProcessor:
     async def _parse_with_config(self, file_path: Path, mapping) -> List[Dict[str, Any]]:
         """Parse a file using source mapping configuration with robust CSV loading."""
         transactions = []
-        
+
+        def resolve_column(col_mapping, df_columns: list) -> Optional[str]:
+            """Return the first matching column name (primary or alias)."""
+            if col_mapping.source_column in df_columns:
+                return col_mapping.source_column
+            for alias in getattr(col_mapping, 'column_aliases', []):
+                if alias in df_columns:
+                    return alias
+            return None
+
         try:
+            # Build flexible required_columns: each entry is a list of alternatives
+            # so csv_loader accepts any file where one candidate per group is present
+            flex_required = []
+            for cm in [mapping.date_mapping, mapping.description_mapping, mapping.amount_mapping]:
+                candidates = [cm.source_column] + list(getattr(cm, 'column_aliases', []))
+                flex_required.append(candidates)
+
             # Convert mapping to metadata dict for robust CSV loader
             metadata = {
-                'required_columns': mapping.required_columns,
+                'required_columns': flex_required,
                 'header_match': getattr(mapping, 'header_match', None),
                 'min_row_fields': getattr(mapping, 'min_row_fields', None),
                 'encoding': getattr(mapping, 'encoding', None)
             }
-            
+
             # Use robust CSV loader with metadata
             df = load_csv_robust(
-                file_path, 
+                file_path,
                 metadata=metadata,
                 logger_instance=processing_logger
             )
@@ -658,31 +674,47 @@ class DataProcessor:
                     f"[DEBUG] First row data: {dict(first_row)}"
                 )
             
-            # Validate required columns
-            required_columns = mapping.required_columns
-            if not all(col in df.columns for col in required_columns):
-                raise ValueError(f"Missing required columns in {file_path.name}. Expected: {required_columns}, Found: {list(df.columns)}")
-            
+            # Validate required columns — accept primary OR alias for each
+            df_cols = list(df.columns)
+            for candidates in flex_required:
+                if not any(c in df_cols for c in candidates):
+                    raise ValueError(
+                        f"Missing required column in {file_path.name}. "
+                        f"Expected one of {candidates}, found: {df_cols}"
+                    )
+
+            # Resolve actual column names (primary or alias)
+            date_col = resolve_column(mapping.date_mapping, df_cols)
+            desc_col = resolve_column(mapping.description_mapping, df_cols)
+            amt_col  = resolve_column(mapping.amount_mapping, df_cols)
+
+            if not date_col:
+                raise ValueError(f"Date column not found. Expected '{mapping.date_mapping.source_column}' or aliases.")
+            if not desc_col:
+                raise ValueError(f"Description column not found. Expected '{mapping.description_mapping.source_column}' or aliases.")
+            if not amt_col:
+                raise ValueError(f"Amount column not found. Expected '{mapping.amount_mapping.source_column}' or aliases.")
+
             for idx, row in df.iterrows():
                 try:
                     transaction = {
                         'source_file': file_path.name
                     }
-                    
-                    # Map required columns with detailed logging
-                    date_value = str(row[mapping.date_mapping.source_column])
-                    description_value = str(row[mapping.description_mapping.source_column])
-                    amount_value = CSVUtils.clean_amount(row[mapping.amount_mapping.source_column])
-                    
-                    transaction[mapping.date_mapping.target_field] = date_value
+
+                    # Map required columns using resolved names
+                    date_value        = str(row[date_col])
+                    description_value = str(row[desc_col])
+                    amount_value      = CSVUtils.clean_amount(row[amt_col])
+
+                    transaction[mapping.date_mapping.target_field]        = date_value
                     transaction[mapping.description_mapping.target_field] = description_value
-                    transaction[mapping.amount_mapping.target_field] = amount_value
-                    
+                    transaction[mapping.amount_mapping.target_field]      = amount_value
+
                     # Map optional columns if they exist in the data
                     for opt_mapping in mapping.optional_mappings:
-                        if opt_mapping.source_column in df.columns:
-                            value = row[opt_mapping.source_column]
-                            # Handle amount formatting for optional amount fields
+                        opt_col = resolve_column(opt_mapping, df_cols)
+                        if opt_col:
+                            value = row[opt_col]
                             if opt_mapping.mapping_type == "amount":
                                 transaction[opt_mapping.target_field] = CSVUtils.clean_amount(value)
                             else:

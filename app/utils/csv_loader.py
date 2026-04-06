@@ -132,9 +132,12 @@ class RobustCSVLoader:
             header_row_index = 0
             header = [cell.strip().strip('"') for cell in next(csv.reader([lines[0]]))]
         
-        # Validate required columns
-        if required_columns and not all(col in header for col in required_columns):
-            raise ValueError(f"Could not find header row with required columns in {file_path.name}")
+        # Validate required columns — each entry may be a string or a list of alternatives
+        if required_columns:
+            for req in required_columns:
+                candidates = [req] if isinstance(req, str) else list(req)
+                if not any(c in header for c in candidates):
+                    raise ValueError(f"Could not find header row with required columns in {file_path.name}")
         self.logger.log_system_event(f"Found header row at line {header_row_index+1}: {header}", level="info")
         
         # Parse data rows
@@ -150,17 +153,23 @@ class RobustCSVLoader:
                 continue
             # Normalize row
             normalized_row = row[:len(header)] + [''] * (len(header) - len(row))
-            # Validate required fields
+            # Validate required fields — required_columns may be List[str] or List[List[str]]
             if required_columns:
-                non_empty_required = sum(1 for i, col in enumerate(header) if col in required_columns and normalized_row[i])
-                if min_row_fields:
-                    if non_empty_required < min_row_fields:
-                        malformed_rows.append((row_idx, normalized_row))
-                        continue
-                else:
-                    if non_empty_required < len(required_columns):
-                        malformed_rows.append((row_idx, normalized_row))
-                        continue
+                # Build flat set of all candidate column names that count as "required"
+                all_req_candidates = set()
+                for req in required_columns:
+                    if isinstance(req, str):
+                        all_req_candidates.add(req)
+                    else:
+                        all_req_candidates.update(req)
+                non_empty_required = sum(
+                    1 for i, col in enumerate(header)
+                    if col in all_req_candidates and normalized_row[i]
+                )
+                threshold = min_row_fields if min_row_fields else len(required_columns)
+                if non_empty_required < threshold:
+                    malformed_rows.append((row_idx, normalized_row))
+                    continue
             data_rows.append(normalized_row)
         # Log malformed rows
         if malformed_rows:
