@@ -499,11 +499,14 @@ class SourceApp {
 
             if (response.ok) {
                 const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.error_message || 'Processing failed');
+                }
                 this.showAlert(`All files processed successfully!`, 'success');
-                
+
                 // Refresh the uploaded files list
                 this.loadUploadedFiles();
-                
+
                 // Switch to processed files tab after successful processing
                 setTimeout(() => {
                     const filesTab = document.getElementById('files-tab');
@@ -535,11 +538,14 @@ class SourceApp {
 
             if (response.ok) {
                 const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.error_message || 'Processing failed');
+                }
                 this.showAlert(`File ${filename} processed successfully!`, 'success');
-                
+
                 // Refresh the uploaded files list
                 this.loadUploadedFiles();
-                
+
                 // Switch to processed files tab after successful processing
                 setTimeout(() => {
                     const filesTab = document.getElementById('files-tab');

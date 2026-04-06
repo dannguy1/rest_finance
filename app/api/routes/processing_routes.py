@@ -121,21 +121,21 @@ async def process_data(
     """Process data for a specific source, automatically generating files for all years found in the data."""
     source_config = get_source_config(source)
     source_enum = source_config["name"]
-    
+
     processing_logger.log_processing_job(
-        "api", source_enum, "started", 0.0, f"Processing started for {source_config['display_name']}"
+        "api", source, "started", 0.0, f"Processing started for {source_config['display_name']}"
     )
-    
-    # Process the data
-    result = await processor.process_source(source_enum, options)
-    
+
+    # Process the data — pass slug (lowercase dir name), not enum
+    result = await processor.process_source(source, options)
+
     if result.success:
         processing_logger.log_processing_job(
-            "api", source_enum, "completed", 100.0, f"Processing completed for {source_config['display_name']}"
+            "api", source, "completed", 100.0, f"Processing completed for {source_config['display_name']}"
         )
     else:
         processing_logger.log_processing_job(
-            "api", source_enum, "error", 0.0, f"Processing failed for {source_config['display_name']}: {result.error_message}"
+            "api", source, "error", 0.0, f"Processing failed for {source_config['display_name']}: {result.error_message}"
         )
     
     return {
@@ -172,22 +172,22 @@ async def process_single_file(
     """
     source_config = get_source_config(source)
     source_enum = source_config["name"]
-    
+
     processing_logger.log_processing_job(
-        "api", source_enum, "started", 0.0, f"Processing file {filename} for {source_config['display_name']}"
+        "api", source, "started", 0.0, f"Processing file {filename} for {source_config['display_name']}"
     )
-    
-    # Process the single file
-    result = await processor.process_single_file(source_enum, filename, options)
-    
+
+    # Process the single file — pass slug (lowercase dir name), not enum
+    result = await processor.process_single_file(source, filename, options)
+
     if result.success:
         processing_logger.log_processing_job(
-            "api", source_enum, "completed", 100.0, 
+            "api", source, "completed", 100.0,
             f"File {filename} processed successfully for {source_config['display_name']}"
         )
     else:
         processing_logger.log_processing_job(
-            "api", source_enum, "error", 0.0, 
+            "api", source, "error", 0.0,
             f"Failed to process {filename} for {source_config['display_name']}: {result.error_message}"
         )
     
