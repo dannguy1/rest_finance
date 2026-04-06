@@ -45,19 +45,33 @@
                     Garlic and Chives
                 </a>
 
-                <!-- Location selector pills -->
+                <!-- Location selector dropdown -->
                 <div class="d-flex align-items-center gap-2" id="location-picker">
                     <span class="text-light-50 small me-1">
                         <i class="bi bi-geo-alt me-1"></i>Location:
                     </span>
-                    <button class="btn btn-sm location-pill" id="pill-gg"
-                            data-location="gg" data-name="GG">
-                        <i class="bi bi-circle-fill me-1" style="font-size:0.55rem"></i>GG
-                    </button>
-                    <button class="btn btn-sm location-pill" id="pill-ar"
-                            data-location="ar" data-name="AR">
-                        <i class="bi bi-circle-fill me-1" style="font-size:0.55rem"></i>AR
-                    </button>
+                    <div class="dropdown">
+                        <button class="btn btn-sm dropdown-toggle" id="location-dropdown-btn"
+                                type="button" data-bs-toggle="dropdown" aria-expanded="false"
+                                style="min-width:140px; text-align:left;">
+                            <i class="bi bi-circle-fill me-1" id="location-dropdown-dot" style="font-size:0.55rem"></i>
+                            <span id="location-dropdown-label">Loading…</span>
+                        </button>
+                        <ul class="dropdown-menu" id="location-dropdown-menu">
+                            <li><h6 class="dropdown-header"><i class="bi bi-geo-alt me-1"></i>Select Location</h6></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button class="dropdown-item location-pill" data-location="gg" data-name="GG · Garlic &amp; Chives 2">
+                                    <i class="bi bi-circle-fill me-2" style="font-size:0.55rem; color:#0d6efd"></i>GG · Garlic &amp; Chives 2
+                                </button>
+                            </li>
+                            <li>
+                                <button class="dropdown-item location-pill" data-location="ar" data-name="AR · Garlic &amp; Chives">
+                                    <i class="bi bi-circle-fill me-2" style="font-size:0.55rem; color:#198754"></i>AR · Garlic &amp; Chives
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
 
                 <div class="navbar-nav ms-auto">
@@ -226,20 +240,17 @@
             const loc = LOCATIONS[locId];
             if (!loc) return;
 
-            // Navbar pills
-            document.querySelectorAll('.location-pill').forEach(btn => {
-                const active = btn.dataset.location === locId;
-                btn.className = 'btn btn-sm location-pill';
-                if (active) {
-                    btn.style.background = loc.color;
-                    btn.style.color = '#fff';
-                    btn.style.borderColor = loc.color;
-                } else {
-                    btn.style.background = '';
-                    btn.style.color = '#adb5bd';
-                    btn.style.borderColor = '#6c757d';
-                }
-            });
+            // Navbar dropdown
+            const dropBtn  = document.getElementById('location-dropdown-btn');
+            const dropDot  = document.getElementById('location-dropdown-dot');
+            const dropLabel = document.getElementById('location-dropdown-label');
+            if (dropBtn) {
+                dropBtn.style.background   = loc.color;
+                dropBtn.style.color        = '#fff';
+                dropBtn.style.borderColor  = loc.color;
+            }
+            if (dropDot)   dropDot.style.color = '#fff';
+            if (dropLabel) dropLabel.textContent = loc.name;
 
             // Sidebar heading
             const heading = document.getElementById('sidebar-location-label');
