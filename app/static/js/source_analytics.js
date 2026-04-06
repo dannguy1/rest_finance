@@ -568,36 +568,131 @@ class SourceAnalyticsApp {
     }
 
     setupDetailModal() {
-        const exportBtn = document.getElementById('detail-modal-export');
-        if (exportBtn) {
-            exportBtn.addEventListener('click', () => this.exportDetailData());
-        }
+        // Modal is created dynamically in showDescriptionDetail — nothing to do here
+        this._detailData = null;
+        this._detailModalInstance = null;
     }
 
     async showDescriptionDetail(description) {
         if (!this.currentFile) return;
 
-        // Reset modal state
-        const loading   = document.getElementById('detail-modal-loading');
-        const summary   = document.getElementById('detail-modal-summary');
-        const tableWrap = document.getElementById('detail-modal-table-wrapper');
-        const errorDiv  = document.getElementById('detail-modal-error');
-        const descLabel = document.getElementById('detail-modal-desc-label');
-        const modalTitle = document.getElementById('descriptionDetailModalLabel');
+        // Clean up any previous modal instance and its element
+        if (this._detailModalInstance) {
+            this._detailModalInstance.dispose();
+            this._detailModalInstance = null;
+        }
+        const old = document.getElementById('descriptionDetailModal');
+        if (old) old.remove();
 
-        loading.style.display   = 'block';
-        summary.style.display   = 'none';
-        tableWrap.style.display = 'none';
-        errorDiv.style.display  = 'none';
+        // Remove any orphaned backdrops
+        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('overflow');
+        document.body.style.removeProperty('padding-right');
 
-        if (descLabel) descLabel.textContent = description;
-        if (modalTitle) modalTitle.innerHTML = `<i class="bi bi-list-ul me-2"></i>${description}`;
+        // Build modal HTML dynamically (matches source.js pattern)
+        const modalHtml = `
+        <div class="modal fade" id="descriptionDetailModal" tabindex="-1"
+             aria-labelledby="descriptionDetailModalLabel" aria-modal="true" role="dialog"
+             style="z-index:1060;">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title" id="descriptionDetailModalLabel">
+                            <i class="bi bi-list-ul me-2"></i>${this._escapeHtml(description)}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white"
+                                data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="text-center py-4" id="detail-modal-loading">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-2 text-muted">Loading transactions...</p>
+                        </div>
+                        <div id="detail-modal-summary" style="display:none;" class="mb-3">
+                            <div class="row g-3">
+                                <div class="col-sm-4">
+                                    <div class="card border-0 bg-light text-center py-2">
+                                        <div class="fs-5 fw-bold text-primary" id="detail-summary-count">—</div>
+                                        <div class="small text-muted">Transactions</div>
+                                    </div>
+                                </div>
+                                <div class="col-sm-4">
+                                    <div class="card border-0 bg-light text-center py-2">
+                                        <div class="fs-5 fw-bold text-success" id="detail-summary-total">—</div>
+                                        <div class="small text-muted">Total Amount</div>
+                                    </div>
+                                </div>
+                                <div class="col-sm-4">
+                                    <div class="card border-0 bg-light text-center py-2">
+                                        <div class="fs-5 fw-bold text-info" id="detail-summary-avg">—</div>
+                                        <div class="small text-muted">Average Amount</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="detail-modal-table-wrapper" style="display:none;">
+                            <div class="table-responsive">
+                                <table class="table table-sm table-striped table-hover">
+                                    <thead class="table-light sticky-top">
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Description</th>
+                                            <th class="text-end">Amount</th>
+                                            <th id="detail-col-account" style="display:none;">Account</th>
+                                            <th id="detail-col-simpledesc" style="display:none;">Simple Description</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="detail-modal-tbody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div id="detail-modal-error" style="display:none;" class="alert alert-danger"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <span class="text-muted small me-auto">${this._escapeHtml(description)}</span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                id="detail-modal-export">
+                            <i class="bi bi-download me-1"></i>Export CSV
+                        </button>
+                        <button type="button" class="btn btn-secondary"
+                                data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
 
-        // Show modal
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
         const modalEl = document.getElementById('descriptionDetailModal');
-        const modal   = bootstrap.Modal.getOrCreateInstance(modalEl);
-        modal.show();
 
+        // Wire up export button
+        document.getElementById('detail-modal-export')
+            .addEventListener('click', () => this.exportDetailData());
+
+        // Force reflow so Bootstrap can measure the element
+        void modalEl.offsetWidth;
+
+        // Create modal instance and show
+        this._detailModalInstance = new bootstrap.Modal(modalEl, {
+            backdrop: true,
+            keyboard: true,
+            focus: true
+        });
+
+        // Clean up element after modal closes
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            if (this._detailModalInstance) {
+                this._detailModalInstance.dispose();
+                this._detailModalInstance = null;
+            }
+            modalEl.remove();
+        }, { once: true });
+
+        this._detailModalInstance.show();
+
+        // Fetch data and populate
         try {
             const url = `/api/files/analytics/${this.config.source}/group-by-description/detail`
                 + `?description=${encodeURIComponent(description)}`
@@ -608,45 +703,51 @@ class SourceAnalyticsApp {
             if (!response.ok) throw new Error(`Server error: ${response.status}`);
             const data = await response.json();
 
-            // Store for export
             this._detailData = data;
 
-            // Populate summary
             document.getElementById('detail-summary-count').textContent = data.count;
             document.getElementById('detail-summary-total').textContent = `$${data.total_amount.toFixed(2)}`;
             const avg = data.count > 0 ? (data.total_amount / data.count) : 0;
             document.getElementById('detail-summary-avg').textContent   = `$${avg.toFixed(2)}`;
 
-            // Populate table
-            const tbody = document.getElementById('detail-modal-tbody');
-            const hasAccount     = data.records.some(r => r.account !== undefined);
-            const hasSimpleDesc  = data.records.some(r => r.simple_description !== undefined);
+            const hasAccount    = data.records.some(r => r.account !== undefined);
+            const hasSimpleDesc = data.records.some(r => r.simple_description !== undefined);
 
-            document.getElementById('detail-col-account').style.display   = hasAccount    ? '' : 'none';
-            document.getElementById('detail-col-simpledesc').style.display = hasSimpleDesc ? '' : 'none';
+            document.getElementById('detail-col-account').style.display    = hasAccount    ? '' : 'none';
+            document.getElementById('detail-col-simpledesc').style.display  = hasSimpleDesc ? '' : 'none';
 
-            tbody.innerHTML = data.records.map(r => {
+            document.getElementById('detail-modal-tbody').innerHTML = data.records.map(r => {
                 const amtClass = r.amount < 0 ? 'text-danger' : 'text-success';
-                const amtSign  = r.amount < 0 ? '-' : '';
+                const sign     = r.amount < 0 ? '-' : '';
                 let row = `<tr>
                     <td class="text-nowrap">${r.date || '—'}</td>
-                    <td>${r.description}</td>
-                    <td class="text-end ${amtClass}">${amtSign}$${Math.abs(r.amount).toFixed(2)}</td>`;
-                if (hasAccount)    row += `<td>${r.account || ''}</td>`;
-                if (hasSimpleDesc) row += `<td>${r.simple_description || ''}</td>`;
+                    <td>${this._escapeHtml(r.description)}</td>
+                    <td class="text-end ${amtClass}">${sign}$${Math.abs(r.amount).toFixed(2)}</td>`;
+                if (hasAccount)    row += `<td>${this._escapeHtml(r.account || '')}</td>`;
+                if (hasSimpleDesc) row += `<td>${this._escapeHtml(r.simple_description || '')}</td>`;
                 row += `</tr>`;
                 return row;
             }).join('');
 
-            loading.style.display   = 'none';
-            summary.style.display   = 'block';
-            tableWrap.style.display = 'block';
+            document.getElementById('detail-modal-loading').style.display      = 'none';
+            document.getElementById('detail-modal-summary').style.display      = 'block';
+            document.getElementById('detail-modal-table-wrapper').style.display = 'block';
 
         } catch (err) {
-            loading.style.display  = 'none';
+            document.getElementById('detail-modal-loading').style.display = 'none';
+            const errorDiv = document.getElementById('detail-modal-error');
             errorDiv.style.display = 'block';
             errorDiv.textContent   = 'Failed to load transactions: ' + err.message;
         }
+    }
+
+    _escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     exportDetailData() {
