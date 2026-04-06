@@ -111,6 +111,19 @@ class DaySummary:
 
 
 @dataclass
+class DiscrepancyItem:
+    """A single diagnosed discrepancy with actionable context."""
+    date: str               # ISO sale_date (or deposit_date for bank-side issues)
+    amount: float           # dollar value at risk
+    ref: str                # merchant batch ref or truncated bank description
+    discrepancy_type: str   # "missing_deposit" | "missing_batch" | "amount_mismatch"
+    reason: str             # human-readable explanation of WHY it didn't match
+    action: str             # recommended investigation step
+    severity: str           # "high" | "medium" | "info"
+    detail: Optional[str] = None   # extra context (e.g., the conflicting amount found)
+
+
+@dataclass
 class VerificationResult:
     location_id: str
     display_name: str
@@ -141,6 +154,8 @@ class VerificationResult:
     # unmatched_bank_count.  Provided for transparency / debugging.
     spillover_deposits: List[BankDeposit] = field(default_factory=list)
     matched_pairs: List[Dict[str, Any]] = field(default_factory=list)
+    # Diagnosed discrepancies with human-readable reasons and recommended actions.
+    discrepancies: List[DiscrepancyItem] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +225,11 @@ class VerificationService:
             if real_batches else 100.0
         )
 
+        discrepancies = self._diagnose_discrepancies(
+            unmatched_batches, unmatched_deposits,
+            real_batches, deposits, cfg,
+        )
+
         return VerificationResult(
             location_id=location_id,
             display_name=cfg["display_name"],
@@ -235,6 +255,7 @@ class VerificationService:
             unmatched_deposits=unmatched_deposits,
             spillover_deposits=spillover_deposits,
             matched_pairs=matched_pairs,
+            discrepancies=discrepancies,
         )
 
     def available_months(self, location_id: str) -> List[Dict[str, int]]:
@@ -476,6 +497,197 @@ class VerificationService:
                 })
 
         return pairs
+
+    # ------------------------------------------------------------------
+    # Discrepancy diagnosis
+    # ------------------------------------------------------------------
+
+    def _diagnose_discrepancies(
+        self,
+        unmatched_batches: List[MerchantBatch],
+        unmatched_deposits: List[BankDeposit],
+        all_real_batches: List[MerchantBatch],
+        all_deposits: List[BankDeposit],
+        cfg: Dict[str, Any],
+    ) -> List["DiscrepancyItem"]:
+        """
+        For every unmatched item, determine WHY it didn't match and suggest
+        what the business owner should investigate.
+
+        Categories:
+          missing_deposit  — merchant batch exists; no bank deposit found
+          missing_batch    — bank deposit exists; no merchant record for that day
+          amount_mismatch  — deposits and batches exist for the date but amounts differ
+        """
+        from collections import defaultdict
+        lag_days = cfg["deposit_lag_days"]
+        items: List[DiscrepancyItem] = []
+
+        # Index: deposit_date → deposits, for quick lookup
+        deps_by_dep_date: Dict[date, List[BankDeposit]] = defaultdict(list)
+        for d in all_deposits:
+            deps_by_dep_date[d.deposit_date].append(d)
+
+        # Index: sale_date → deposits (for Chase where sale_date is known)
+        deps_by_sale_date: Dict[date, List[BankDeposit]] = defaultdict(list)
+        for d in all_deposits:
+            if d.sale_date:
+                deps_by_sale_date[d.sale_date].append(d)
+
+        # Index: sale_date → merchant batches
+        batches_by_sale: Dict[date, List[MerchantBatch]] = defaultdict(list)
+        for b in all_real_batches:
+            batches_by_sale[b.sale_date].append(b)
+
+        # ── Unmatched merchant batches ──────────────────────────────────
+        for batch in unmatched_batches:
+            expected_dates = [_add_business_days(batch.sale_date, lag) for lag in lag_days]
+            dates_str = ", ".join(d.strftime("%b %d") for d in expected_dates)
+
+            # Check if any deposit lands on those dates (amount doesn't matter)
+            nearby_deps = [
+                d for ed in expected_dates
+                for d in deps_by_dep_date.get(ed, [])
+            ]
+            nearby_amounts = sorted(set(d.amount for d in nearby_deps))
+
+            # Chase: also check by sale_date directly
+            if cfg.get("bank_sale_date_regex"):
+                nearby_deps_by_sale = deps_by_sale_date.get(batch.sale_date, [])
+                nearby_amounts_by_sale = sorted(set(d.amount for d in nearby_deps_by_sale))
+                if nearby_amounts_by_sale:
+                    nearby_amounts = nearby_amounts_by_sale
+
+            if nearby_amounts:
+                found_str = " or ".join(f"${a:,.2f}" for a in nearby_amounts[:3])
+                items.append(DiscrepancyItem(
+                    date=batch.sale_date.isoformat(),
+                    amount=batch.amount,
+                    ref=batch.ref,
+                    discrepancy_type="amount_mismatch",
+                    reason=(
+                        f"Bank deposit(s) of {found_str} found for this sale date, "
+                        f"but none matches the batch amount of ${batch.amount:,.2f}."
+                    ),
+                    action=(
+                        "Compare merchant batch total with bank credits for this date. "
+                        "A fee deduction, partial settlement, or split deposit may explain "
+                        "the difference."
+                    ),
+                    severity="medium",
+                    detail=f"Expected ${batch.amount:,.2f}; found {found_str} in bank",
+                ))
+            else:
+                items.append(DiscrepancyItem(
+                    date=batch.sale_date.isoformat(),
+                    amount=batch.amount,
+                    ref=batch.ref,
+                    discrepancy_type="missing_deposit",
+                    reason=(
+                        f"No bank deposit found for expected settlement dates "
+                        f"({dates_str}). The batch was recorded by the merchant "
+                        f"processor but no corresponding credit appeared in the bank."
+                    ),
+                    action=(
+                        "Contact the merchant processor to confirm the batch was "
+                        "submitted and funded. Check if settlement was delayed beyond "
+                        "3 business days or directed to a different account."
+                    ),
+                    severity="high",
+                    detail=f"Expected deposit by {expected_dates[-1].strftime('%b %d')}",
+                ))
+
+        # ── Unmatched bank deposits ─────────────────────────────────────
+        for dep in unmatched_deposits:
+            sale_date = dep.sale_date
+            has_known_sale_date = sale_date is not None  # True for Chase, False for BofA
+
+            if sale_date is None:
+                # BofA: infer from deposit_date - min_lag
+                inferred = dep.deposit_date - timedelta(days=1)
+                sale_date_display = f"~{inferred.strftime('%Y-%m-%d')} (inferred)"
+            else:
+                sale_date_display = sale_date.isoformat()
+
+            # Find batches for the same sale_date (Chase only, since sale_date is known)
+            if sale_date:
+                same_day_batches = batches_by_sale.get(sale_date, [])
+            else:
+                same_day_batches = []
+
+            if same_day_batches:
+                batch_total = round(sum(b.amount for b in same_day_batches), 2)
+                items.append(DiscrepancyItem(
+                    date=dep.deposit_date.isoformat(),
+                    amount=dep.amount,
+                    ref=dep.description[:60],
+                    discrepancy_type="amount_mismatch",
+                    reason=(
+                        f"Bank received ${dep.amount:,.2f} for sale date "
+                        f"{sale_date_display}, but the merchant batch total "
+                        f"for that day is ${batch_total:,.2f} — a difference of "
+                        f"${abs(dep.amount - batch_total):,.2f}."
+                    ),
+                    action=(
+                        "Review all batches for this sale date in the merchant portal. "
+                        "A batch may have been voided, re-submitted, or the wrong "
+                        "terminal's data was exported."
+                    ),
+                    severity="medium" if abs(dep.amount - batch_total) < 50 else "high",
+                    detail=f"Bank: ${dep.amount:,.2f}  Merchant: ${batch_total:,.2f}",
+                ))
+            elif has_known_sale_date:
+                # Chase: sale_date is authoritative — no matching batch is a real gap
+                items.append(DiscrepancyItem(
+                    date=dep.deposit_date.isoformat(),
+                    amount=dep.amount,
+                    ref=dep.description[:60],
+                    discrepancy_type="missing_batch",
+                    reason=(
+                        f"Bank received a deposit of ${dep.amount:,.2f} on "
+                        f"{dep.deposit_date.strftime('%b %d')} (sale date "
+                        f"{sale_date_display}), but no merchant batch was found "
+                        f"for that sale date. The merchant statement may be "
+                        f"incomplete or missing entirely for this day."
+                    ),
+                    action=(
+                        "Request the merchant statement for this sale date from the "
+                        "processor. Verify the deposit does not belong to a terminal "
+                        "not included in the current report."
+                    ),
+                    severity="high",
+                    detail=f"No merchant record for sale date {sale_date_display}",
+                ))
+            else:
+                # BofA: sale_date is unknown — cannot confirm this is a real discrepancy;
+                # it may originate from a different terminal or card type.
+                items.append(DiscrepancyItem(
+                    date=dep.deposit_date.isoformat(),
+                    amount=dep.amount,
+                    ref=dep.description[:60],
+                    discrepancy_type="missing_batch",
+                    reason=(
+                        f"Bank deposit of ${dep.amount:,.2f} received on "
+                        f"{dep.deposit_date.strftime('%b %d')} has no matching "
+                        f"merchant batch. Because this bank does not embed the "
+                        f"original sale date in deposit descriptions, the source "
+                        f"cannot be confirmed — it may be from a different terminal "
+                        f"or payment method depositing to the same account."
+                    ),
+                    action=(
+                        "Cross-reference with the merchant portal for "
+                        f"approximately {sale_date_display}. "
+                        "If this terminal is not tracked in your merchant reports, "
+                        "no action is needed."
+                    ),
+                    severity="info",
+                    detail=f"Sale date inferred as {sale_date_display}",
+                ))
+
+        # Sort: high severity first, then by date
+        severity_order = {"high": 0, "medium": 1, "info": 2}
+        items.sort(key=lambda x: (severity_order.get(x.severity, 9), x.date))
+        return items
 
     # ------------------------------------------------------------------
     # Day-level summary

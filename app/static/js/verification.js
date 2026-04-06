@@ -161,6 +161,7 @@ const Verification = (() => {
     function _renderResults(data) {
         _renderSummaryCards(data.summary, data.display_name, data.year, data.month);
         _renderDayTable(data.day_summaries, data.matched_pairs);
+        _renderDiscrepancies(data.discrepancies || []);
         _renderUnmatched(data.unmatched_batches, data.unmatched_deposits);
         document.getElementById('results-section').classList.remove('d-none');
         document.getElementById('empty-state').classList.add('d-none');
@@ -214,7 +215,33 @@ const Verification = (() => {
             </div>
             <div class="text-muted small">${s.unmatched_merchant_count} batches missing deposit</div>
           </div>
-        </div>`;
+        </div>
+        ${(s.discrepancy_count > 0) ? (() => {
+            const actionable = s.high_severity_count + (s.discrepancy_count - s.high_severity_count); // will refine below
+            const highMed = s.high_severity_count; // high only, medium handled inline
+            if (s.high_severity_count > 0 || (s.discrepancy_count - s.high_severity_count) > 0) {
+                return `
+                <div class="col-12 mt-2">
+                  <div class="alert alert-danger d-flex align-items-center mb-0 py-2">
+                    <i class="bi bi-exclamation-triangle-fill fs-5 me-3 flex-shrink-0"></i>
+                    <div>
+                      <strong>${s.discrepancy_count} discrepanc${s.discrepancy_count !== 1 ? 'ies' : 'y'} detected</strong>
+                      — ${_fmt(s.discrepancy_amount)} at risk
+                      ${s.high_severity_count > 0 ? `<span class="ms-2 badge bg-danger">${s.high_severity_count} HIGH severity</span>` : ''}
+                      <span class="ms-2 text-muted small">See the Discrepancy Report below for details and recommended actions.</span>
+                    </div>
+                  </div>
+                </div>`;
+            }
+            return '';
+        })() : `
+        <div class="col-12 mt-2">
+          <div class="alert alert-success d-flex align-items-center mb-0 py-2">
+            <i class="bi bi-check-circle-fill fs-5 me-3 flex-shrink-0"></i>
+            <strong>No discrepancies found.</strong>
+            <span class="ms-2 text-muted small">All merchant batches have corresponding bank deposits.</span>
+          </div>
+        </div>`}`;
 
         document.getElementById('summary-cards').innerHTML = html;
 
@@ -285,6 +312,54 @@ const Verification = (() => {
                 _openDrillDown(saleDate, days, pairsByDate[saleDate] || []);
             });
         });
+    }
+
+    function _renderDiscrepancies(items) {
+        const section = document.getElementById('discrepancies-section');
+        const tbody   = document.getElementById('discrepancy-tbody');
+        const countBadge  = document.getElementById('discrepancy-count-badge');
+        const amountBadge = document.getElementById('discrepancy-amount-badge');
+
+        if (!items || items.length === 0) {
+            section.classList.add('d-none');
+            return;
+        }
+
+        section.classList.remove('d-none');
+        countBadge.textContent = items.length + ' issue' + (items.length !== 1 ? 's' : '');
+
+        const total = items.reduce((s, i) => s + i.amount, 0);
+        amountBadge.textContent = 'At risk: ' + _fmt(total);
+
+        const TYPE_LABELS = {
+            missing_deposit: { label: 'Missing Deposit', cls: 'bg-danger' },
+            missing_batch:   { label: 'Missing Batch',   cls: 'bg-warning text-dark' },
+            amount_mismatch: { label: 'Amount Mismatch', cls: 'bg-orange text-white' },
+        };
+
+        tbody.innerHTML = items.map(item => {
+            const sev = item.severity;
+            const rowCls = `discrepancy-${sev}`;
+            const typeInfo = TYPE_LABELS[item.discrepancy_type] || { label: item.discrepancy_type, cls: 'bg-secondary' };
+            // Map amount_mismatch to a distinct color
+            const badgeCls = item.discrepancy_type === 'amount_mismatch' ? 'bg-warning text-dark' : typeInfo.cls;
+            const sevIcon = sev === 'high' ? '🔴' : sev === 'medium' ? '🟡' : 'ℹ️';
+            const detailHtml = item.detail
+                ? `<div class="text-muted small mt-1 font-monospace">${_esc(item.detail)}</div>` : '';
+            return `<tr class="${rowCls}">
+              <td class="text-center fs-6">${sevIcon}</td>
+              <td class="font-monospace small fw-semibold">${_fmtDate(item.date)}</td>
+              <td class="text-end fw-semibold text-danger">${_fmt(item.amount)}</td>
+              <td><span class="badge ${badgeCls}">${typeInfo.label}</span></td>
+              <td>
+                <div class="discrepancy-reason">${_esc(item.reason)}</div>
+                ${detailHtml}
+              </td>
+              <td class="discrepancy-action">
+                <i class="bi bi-arrow-right-circle me-1"></i>${_esc(item.action)}
+              </td>
+            </tr>`;
+        }).join('');
     }
 
     function _renderUnmatched(batches, deposits) {

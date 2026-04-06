@@ -134,6 +134,20 @@ async def run_verification(
         for d in result.unmatched_deposits
     ]
 
+    discrepancies = [
+        {
+            "date": item.date,
+            "amount": item.amount,
+            "ref": item.ref,
+            "discrepancy_type": item.discrepancy_type,
+            "reason": item.reason,
+            "action": item.action,
+            "severity": item.severity,
+            "detail": item.detail,
+        }
+        for item in result.discrepancies
+    ]
+
     return {
         "success": True,
         "location_id": result.location_id,
@@ -154,9 +168,13 @@ async def run_verification(
             "unmatched_bank_amount": result.unmatched_bank_amount,
             "match_rate": result.match_rate,
             "variance": result.variance,
+            "discrepancy_count": len(result.discrepancies),
+            "discrepancy_amount": round(sum(i.amount for i in result.discrepancies), 2),
+            "high_severity_count": sum(1 for i in result.discrepancies if i.severity == "high"),
         },
         "day_summaries": day_summaries,
         "unmatched_batches": unmatched_batches,
         "unmatched_deposits": unmatched_deposits,
+        "discrepancies": discrepancies,
         "matched_pairs": result.matched_pairs,
     }
