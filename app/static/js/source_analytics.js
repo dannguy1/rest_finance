@@ -25,6 +25,8 @@ class SourceAnalyticsApp {
                     this.loadAmountAnalysis();
                 } else if (e.target.id === 'trends-tab') {
                     this.loadTrends();
+                } else if (e.target.id === 'merchant-analysis-tab') {
+                    this.loadMerchantAnalysis();
                 }
             });
         });
@@ -42,6 +44,13 @@ class SourceAnalyticsApp {
         if (exportBtn) {
             exportBtn.addEventListener('click', () => {
                 this.exportDescriptionData();
+            });
+        }
+
+        const exportMerchantBtn = document.getElementById('export-merchant-data');
+        if (exportMerchantBtn) {
+            exportMerchantBtn.addEventListener('click', () => {
+                this.exportMerchantData();
             });
         }
     }
@@ -742,6 +751,132 @@ class SourceAnalyticsApp {
             errorDiv.style.display = 'block';
             errorDiv.textContent   = 'Failed to load transactions: ' + err.message;
         }
+    }
+
+    // ── Merchant Analysis ────────────────────────────────────────────────────
+
+    async loadMerchantAnalysis() {
+        if (!this.currentFile) {
+            this.showEmptyState('merchant');
+            return;
+        }
+        this.showLoading('merchant');
+
+        try {
+            const url = `/api/files/analytics/${this.config.source}/merchant-analysis`
+                + `?fileType=${this.currentFile.type}`
+                + `&filePath=${encodeURIComponent(this.currentFile.path)}`;
+
+            const response = await fetch(url);
+
+            if (response.status === 422) {
+                const err = await response.json();
+                this.hideLoading('merchant');
+                document.getElementById('merchant-empty').style.display = 'none';
+                document.getElementById('merchant-unavailable').style.display = 'block';
+                const msgEl = document.getElementById('merchant-unavailable-msg');
+                if (msgEl) msgEl.textContent = err.detail || 'Merchant Analysis is not configured for this source.';
+                return;
+            }
+
+            if (!response.ok) throw new Error(`Server error: ${response.status}`);
+            const data = await response.json();
+
+            this._merchantData = data;
+            this.displayMerchantAnalysis(data);
+        } catch (err) {
+            this.hideLoading('merchant');
+            this.showAlert('Failed to load merchant analysis: ' + err.message, 'danger');
+            this.showEmptyState('merchant');
+        }
+    }
+
+    displayMerchantAnalysis(data) {
+        this.hideLoading('merchant');
+        document.getElementById('merchant-empty').style.display = 'none';
+        document.getElementById('merchant-unavailable').style.display = 'none';
+        document.getElementById('merchant-results').style.display = 'block';
+
+        // Pattern badge
+        const patternLabel = data.pattern?.label || data.pattern?.value || 'Merchant Filter';
+        document.getElementById('merchant-pattern-label').textContent = patternLabel;
+
+        // Summary cards
+        const s = data.summary;
+        document.getElementById('merchant-total-income').textContent  = `$${s.total_income.toFixed(2)}`;
+        document.getElementById('merchant-total-charges').textContent = `$${Math.abs(s.total_charges).toFixed(2)}`;
+        document.getElementById('merchant-income-count').textContent  = `${s.income_count} deposits`;
+        document.getElementById('merchant-charge-count').textContent  = `${s.charge_count} charges`;
+        document.getElementById('merchant-total-count').textContent   = s.total_count;
+
+        const netEl = document.getElementById('merchant-net');
+        netEl.textContent = `$${s.net.toFixed(2)}`;
+        netEl.className = `fs-4 fw-bold ${s.net >= 0 ? 'text-success' : 'text-danger'}`;
+
+        // Monthly breakdown table
+        const monthTbody = document.getElementById('merchant-monthly-tbody');
+        const monthTfoot = document.getElementById('merchant-monthly-tfoot');
+        if (data.monthly_breakdown.length === 0) {
+            monthTbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No monthly data</td></tr>';
+        } else {
+            monthTbody.innerHTML = data.monthly_breakdown.map(m => {
+                const netClass = m.net >= 0 ? 'text-success' : 'text-danger';
+                return `<tr>
+                    <td class="fw-semibold">${this._escapeHtml(m.label)}</td>
+                    <td class="text-end text-success">$${m.income.toFixed(2)}</td>
+                    <td class="text-end text-danger">$${Math.abs(m.charges).toFixed(2)}</td>
+                    <td class="text-end ${netClass} fw-semibold">$${m.net.toFixed(2)}</td>
+                    <td class="text-center">${m.count}</td>
+                </tr>`;
+            }).join('');
+            // Totals footer
+            monthTfoot.innerHTML = `<tr>
+                <td>Total</td>
+                <td class="text-end text-success">$${s.total_income.toFixed(2)}</td>
+                <td class="text-end text-danger">$${Math.abs(s.total_charges).toFixed(2)}</td>
+                <td class="text-end ${s.net >= 0 ? 'text-success' : 'text-danger'}">$${s.net.toFixed(2)}</td>
+                <td class="text-center">${s.total_count}</td>
+            </tr>`;
+        }
+
+        // Transaction table
+        const txnCount = data.transactions.length;
+        document.getElementById('merchant-txn-count-badge').textContent = txnCount;
+        const txnTbody = document.getElementById('merchant-txn-tbody');
+        if (txnCount === 0) {
+            txnTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No matching transactions found</td></tr>';
+        } else {
+            txnTbody.innerHTML = data.transactions.map(t => {
+                const amtClass = t.amount >= 0 ? 'text-success' : 'text-danger';
+                const sign     = t.amount < 0 ? '-' : '';
+                const badge    = t.type === 'income'
+                    ? '<span class="badge bg-success bg-opacity-75">Income</span>'
+                    : '<span class="badge bg-danger bg-opacity-75">Charge</span>';
+                return `<tr>
+                    <td class="text-nowrap">${this._escapeHtml(t.date || '—')}</td>
+                    <td>${this._escapeHtml(t.description)}</td>
+                    <td class="text-end ${amtClass}">${sign}$${Math.abs(t.amount).toFixed(2)}</td>
+                    <td class="text-center">${badge}</td>
+                </tr>`;
+            }).join('');
+        }
+    }
+
+    exportMerchantData() {
+        if (!this._merchantData) return;
+        const d = this._merchantData;
+        const rows = [['Date', 'Description', 'Amount', 'Type']];
+        d.transactions.forEach(t => rows.push([t.date, t.description, t.amount.toFixed(2), t.type]));
+        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `${this.config.sourceName}_merchant_analysis.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     }
 
     _escapeHtml(str) {

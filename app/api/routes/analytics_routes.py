@@ -26,12 +26,24 @@ SOURCE_CONFIGS = {
     "bankofamerica": {
         "name": "BankOfAmerica",
         "icon": "bank",
-        "description": "Bank statement processing and management"
+        "description": "Bank statement processing and management",
+        # Merchant activity pattern: BofA prefixes merchant card deposits/charges with this string
+        "merchant_pattern": {
+            "type": "prefix",          # match start of Description
+            "value": "BANKCARD 8076 DES",
+            "label": "Merchant Deposits & Charges (BANKCARD 8076)"
+        }
     },
     "chase": {
         "name": "Chase",
         "icon": "credit-card",
-        "description": "Chase bank statement processing and management"
+        "description": "Chase bank statement processing and management",
+        # Chase embeds the terminal ID anywhere in the description
+        "merchant_pattern": {
+            "type": "contains",        # match anywhere in Description
+            "value": "BANKCARD 8076",
+            "label": "Merchant Deposits & Charges (BANKCARD 8076)"
+        }
     },
     "sysco": {
         "name": "Sysco",
@@ -419,6 +431,143 @@ async def analytics_trends(
         "growth_rate": round(growth_rate, 2),
         "peak_month": str(peak_month['month']) if peak_month else None,
         "lowest_month": str(lowest_month['month']) if lowest_month else None
+    }
+
+
+def _apply_merchant_pattern(series: "pd.Series", pattern: dict) -> "pd.Series":
+    """Return a boolean mask selecting rows that match the merchant pattern."""
+    ptype = pattern.get("type", "contains")
+    value = pattern["value"]
+    if ptype == "prefix":
+        return series.str.startswith(value, na=False)
+    elif ptype == "suffix":
+        return series.str.endswith(value, na=False)
+    elif ptype == "regex":
+        return series.str.contains(value, regex=True, case=False, na=False)
+    else:  # "contains" (default)
+        return series.str.contains(value, regex=False, case=False, na=False)
+
+
+@router.get("/{source}/merchant-analysis")
+@limiter.limit(settings.rate_limit_api)
+@handle_service_errors
+async def analytics_merchant_analysis(
+    source: str,
+    request: Request,
+    fileType: str = Query(..., description="Type of file (processed or uploaded)"),
+    filePath: str = Query(..., description="Path to the file")
+):
+    """
+    Extract merchant card deposit/charge transactions and return a structured analysis.
+
+    Merchant transactions are identified by bank-specific patterns defined in SOURCE_CONFIGS.
+    Returns individual transactions sorted by date, a summary (income / charges / net),
+    and a per-month breakdown.
+    """
+    source_config = get_source_config(source)
+    source_enum = source_config["name"]
+
+    pattern = source_config.get("merchant_pattern")
+    if not pattern:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Merchant Analysis is not configured for source '{source}'. "
+                   "Add a 'merchant_pattern' entry to SOURCE_CONFIGS to enable it."
+        )
+
+    df = await load_file_data(source_enum, fileType, filePath)
+
+    if 'Description' not in df.columns or 'Amount' not in df.columns:
+        raise HTTPException(
+            status_code=422,
+            detail="Merchant Analysis requires Description and Amount columns."
+        )
+
+    # Apply bank-specific pattern filter
+    mask = _apply_merchant_pattern(df['Description'], pattern)
+    merchant_df = df[mask].copy()
+
+    if merchant_df.empty:
+        return {
+            "source": source_enum,
+            "file_type": fileType,
+            "file_path": filePath,
+            "pattern": pattern,
+            "summary": {
+                "total_income": 0.0,
+                "total_charges": 0.0,
+                "net": 0.0,
+                "income_count": 0,
+                "charge_count": 0,
+                "total_count": 0
+            },
+            "monthly_breakdown": [],
+            "transactions": []
+        }
+
+    # Sort by date
+    date_col = get_date_column(source_enum)
+    if date_col in merchant_df.columns:
+        merchant_df[date_col] = pd.to_datetime(merchant_df[date_col], errors='coerce')
+        merchant_df = merchant_df.sort_values(date_col)
+
+    # Build transaction list
+    transactions = []
+    for _, row in merchant_df.iterrows():
+        amt = float(row['Amount'])
+        entry = {
+            "date": row[date_col].strftime('%Y-%m-%d') if date_col in merchant_df.columns and pd.notna(row[date_col]) else '',
+            "description": str(row['Description']),
+            "amount": amt,
+            "type": "income" if amt >= 0 else "charge",
+        }
+        for extra in ('Account', 'Simple Description', 'Source File'):
+            if extra in merchant_df.columns:
+                entry[extra.lower().replace(' ', '_')] = str(row[extra])
+        transactions.append(entry)
+
+    # Summary
+    amounts = merchant_df['Amount']
+    income_mask = amounts >= 0
+    charge_mask = amounts < 0
+    total_income = float(amounts[income_mask].sum())
+    total_charges = float(amounts[charge_mask].sum())
+
+    summary = {
+        "total_income": round(total_income, 2),
+        "total_charges": round(total_charges, 2),
+        "net": round(total_income + total_charges, 2),
+        "income_count": int(income_mask.sum()),
+        "charge_count": int(charge_mask.sum()),
+        "total_count": len(merchant_df)
+    }
+
+    # Monthly breakdown
+    monthly_breakdown = []
+    if date_col in merchant_df.columns:
+        merchant_df['_month'] = merchant_df[date_col].dt.to_period('M')
+        for period, grp in merchant_df.groupby('_month'):
+            grp_income = float(grp.loc[grp['Amount'] >= 0, 'Amount'].sum())
+            grp_charges = float(grp.loc[grp['Amount'] < 0, 'Amount'].sum())
+            monthly_breakdown.append({
+                "month": str(period),
+                "label": period.strftime('%b %Y'),
+                "income": round(grp_income, 2),
+                "charges": round(grp_charges, 2),
+                "net": round(grp_income + grp_charges, 2),
+                "income_count": int((grp['Amount'] >= 0).sum()),
+                "charge_count": int((grp['Amount'] < 0).sum()),
+                "count": len(grp)
+            })
+
+    return {
+        "source": source_enum,
+        "file_type": fileType,
+        "file_path": filePath,
+        "pattern": pattern,
+        "summary": summary,
+        "monthly_breakdown": monthly_breakdown,
+        "transactions": transactions
     }
 
 
