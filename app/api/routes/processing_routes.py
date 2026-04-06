@@ -40,9 +40,9 @@ SOURCE_CONFIGS = {
         "name": "BankOfAmerica",
         "display_name": "Bank of America",
         "description": "Bank statement processing",
-        "required_columns": ["Status", "Date", "Original Description", "Amount"],
+        "required_columns": ["Date", "Description", "Amount"],
         "date_column": "Date",
-        "description_column": "Original Description",
+        "description_column": "Description",
         "amount_column": "Amount",
         "date_format": "MM/DD/YYYY"
     },
