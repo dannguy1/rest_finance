@@ -9,27 +9,12 @@ class SourceApp {
     }
 
     init() {
-        this.setupEventListeners();
         this.setupFileUpload();
         this.setupTabEvents();
         this.setupFileManagement();
         this.setupFilters();
         this.setupPreviewTab();
         this.loadProcessedFiles();
-    }
-
-    setupEventListeners() {
-        // File upload events
-        this.setupFileUpload();
-        
-        // Tab events
-        this.setupTabEvents();
-        
-        // File management events
-        this.setupFileManagement();
-        
-        // Filter events
-        this.setupFilters();
     }
 
     setupFileUpload() {
@@ -138,17 +123,27 @@ class SourceApp {
     }
 
     async handleFiles(files) {
-        const csvFiles = files.filter(file => 
-            file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv')
-        );
+        // GG and AR support PDF files, others only CSV
+        const validFiles = files.filter(file => {
+            const isCSV = file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv');
+            const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+            
+            if (this.config.source === 'gg' || this.config.source === 'ar') {
+                return isCSV || isPDF;
+            }
+            return isCSV;
+        });
 
-        if (csvFiles.length === 0) {
-            this.showAlert('Please select valid CSV files', 'warning');
+        if (validFiles.length === 0) {
+            const allowedTypes = (this.config.source === 'gg' || this.config.source === 'ar') 
+                ? 'CSV or PDF files' 
+                : 'CSV files';
+            this.showAlert(`Please select valid ${allowedTypes}`, 'warning');
             return;
         }
 
         this.showUploadProgress();
-        await this.uploadFiles(csvFiles);
+        await this.uploadFiles(validFiles);
     }
 
     async uploadFiles(files) {
@@ -856,38 +851,8 @@ class SourceApp {
         const header = headers[index] ? headers[index].toLowerCase() : '';
         const value = cell.toString();
         
-        // Format amounts (assuming amount columns contain numbers)
-        if (header.includes('amount') || header.includes('total') || header.includes('sum')) {
-            const num = parseFloat(value);
-            if (!isNaN(num)) {
-                return num.toLocaleString('en-US', {
-                    style: 'currency',
-                    currency: 'USD',
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                });
-            }
-        }
-        
-        // Format dates
-        if (header.includes('date')) {
-            const date = new Date(value);
-            if (!isNaN(date.getTime())) {
-                return date.toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                });
-            }
-        }
-        
-        // Format large numbers
-        const num = parseFloat(value);
-        if (!isNaN(num) && Math.abs(num) >= 1000) {
-            return num.toLocaleString('en-US');
-        }
-        
-        // Truncate long descriptions
+        // Don't format - display as-is to preserve original data
+        // Just truncate long descriptions for readability
         if (header.includes('description') && value.length > 50) {
             return `<span title="${value}">${value.substring(0, 47)}...</span>`;
         }
@@ -947,6 +912,12 @@ class SourceApp {
         
         const [fileType, filePath] = fileValue.split(':', 2);
         
+        // Check if this is a PDF file
+        if (filePath.toLowerCase().endsWith('.pdf')) {
+            this.displayPdfPreview(filePath);
+            return;
+        }
+        
         // Show loading state
         this.showPreviewLoading(true);
         
@@ -972,9 +943,79 @@ class SourceApp {
         }
     }
 
+    displayPdfPreview(filePath) {
+        // Hide loading and table
+        this.showPreviewLoading(false);
+        const container = document.getElementById('preview-table-container');
+        const emptyState = document.getElementById('preview-empty-state');
+        const fileInfo = document.getElementById('preview-file-info');
+        
+        if (container) container.style.display = 'none';
+        if (emptyState) emptyState.style.display = 'none';
+        
+        // Show file info
+        const filename = document.getElementById('preview-filename');
+        const fileTypeSpan = document.getElementById('preview-file-type');
+        
+        if (filename) {
+            filename.textContent = filePath.split('/').pop();
+        }
+        if (fileTypeSpan) {
+            fileTypeSpan.textContent = 'PDF Document';
+        }
+        if (fileInfo) {
+            fileInfo.style.display = 'block';
+            // Hide rows and size info for PDFs
+            const totalRows = document.getElementById('preview-total-rows');
+            const fileSize = document.getElementById('preview-file-size');
+            if (totalRows && totalRows.parentElement) {
+                totalRows.parentElement.style.display = 'none';
+            }
+            if (fileSize && fileSize.parentElement) {
+                fileSize.parentElement.style.display = 'none';
+            }
+        }
+        
+        // Create or update PDF viewer
+        let pdfContainer = document.getElementById('pdf-viewer-container');
+        if (!pdfContainer) {
+            pdfContainer = document.createElement('div');
+            pdfContainer.id = 'pdf-viewer-container';
+            pdfContainer.style.cssText = 'width: 100%; height: 800px; border: 1px solid #dee2e6; border-radius: 4px; overflow: hidden; margin-top: 1rem;';
+            
+            // Insert after file info
+            if (fileInfo && fileInfo.parentElement) {
+                fileInfo.parentElement.appendChild(pdfContainer);
+            }
+        }
+        
+        // Create iframe to display PDF
+        const pdfUrl = `/api/files/view-pdf/${this.config.source}?file=${encodeURIComponent(filePath)}`;
+        pdfContainer.innerHTML = `
+            <iframe 
+                src="${pdfUrl}" 
+                style="width: 100%; height: 100%; border: none;"
+                title="PDF Preview">
+                Your browser does not support PDFs. 
+                <a href="${pdfUrl}" target="_blank">Download the PDF</a> to view it.
+            </iframe>
+        `;
+        
+        pdfContainer.style.display = 'block';
+        
+        // Store current file info for download
+        this.currentPreviewFile = { type: 'pdf', path: filePath };
+    }
+
     displayFullPreview(data, fileType, filePath) {
         // Hide loading state
         this.showPreviewLoading(false);
+        
+        // Hide PDF viewer if it exists
+        const pdfContainer = document.getElementById('pdf-viewer-container');
+        if (pdfContainer) {
+            pdfContainer.style.display = 'none';
+        }
         
         // Show file info
         this.showPreviewFileInfo(data, fileType);
@@ -1002,6 +1043,14 @@ class SourceApp {
             totalRows.textContent = data.totalRows ? data.totalRows.toLocaleString() : 'Unknown';
             fileSize.textContent = this.formatFileSize(data.fileSize || 0);
             fileTypeSpan.textContent = fileType === 'uploaded' ? 'Uploaded CSV' : 'Processed CSV';
+            
+            // Show row and size info for CSV files
+            if (totalRows.parentElement) {
+                totalRows.parentElement.style.display = '';
+            }
+            if (fileSize.parentElement) {
+                fileSize.parentElement.style.display = '';
+            }
             
             fileInfo.style.display = 'block';
         }
@@ -1110,6 +1159,12 @@ class SourceApp {
         const container = document.getElementById('preview-table-container');
         if (container) {
             container.style.display = 'none';
+        }
+        
+        // Hide PDF viewer
+        const pdfContainer = document.getElementById('pdf-viewer-container');
+        if (pdfContainer) {
+            pdfContainer.style.display = 'none';
         }
         
         // Show empty state

@@ -51,6 +51,36 @@ async def list_source_mappings(request: Request):
     }
 
 
+@router.get("/list-sample-files")
+@limiter.limit(settings.rate_limit_api)
+async def list_sample_files(request: Request):
+    """List available sample files in the data source directory."""
+    try:
+        data_source_dir = get_data_source_directory()
+        if not data_source_dir.exists():
+            return {"files": []}
+
+        sample_files = []
+        for file_path in data_source_dir.rglob('*'):
+            if file_path.is_file() and file_path.suffix.lower() in ['.csv', '.xlsx', '.xls']:
+                relative_path = file_path.relative_to(data_source_dir)
+                sample_files.append({
+                    'name': file_path.name,
+                    'path': str(relative_path),
+                    'size': f"{file_path.stat().st_size / 1024:.1f} KB",
+                    'full_path': str(file_path)
+                })
+
+        sample_files.sort(key=lambda x: x['name'])
+        return {"files": sample_files}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = f"Error listing sample files: {str(e)}"
+        processing_logger.log_system_event(error_msg, level="error")
+        raise HTTPException(status_code=500, detail=error_msg)
+
+
 @router.get("/{source_id}")
 @limiter.limit(settings.rate_limit_api)
 @handle_service_errors
@@ -593,43 +623,6 @@ async def process_sample_file(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/list-sample-files")
-@limiter.limit(settings.rate_limit_api)
-async def list_sample_files(request: Request):
-    """List available sample files in the data source directory."""
-    try:
-        data_source_dir = get_data_source_directory()
-        if not data_source_dir.exists():
-            return {
-                "files": []
-            }
-        
-        # Find CSV and Excel files
-        sample_files = []
-        for file_path in data_source_dir.rglob('*'):
-            if file_path.is_file() and file_path.suffix.lower() in ['.csv', '.xlsx', '.xls']:
-                # Get relative path from data source directory
-                relative_path = file_path.relative_to(data_source_dir)
-                sample_files.append({
-                    'name': file_path.name,
-                    'path': str(relative_path),
-                    'size': f"{file_path.stat().st_size / 1024:.1f} KB",
-                    'full_path': str(file_path)
-                })
-        
-        # Sort by name
-        sample_files.sort(key=lambda x: x['name'])
-        
-        return {
-            "files": sample_files
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        error_msg = f"Error listing sample files: {str(e)}"
-        processing_logger.log_system_event(error_msg, level="error")
-        raise HTTPException(status_code=500, detail=error_msg)
-
 
 @router.post("/process-existing-file")
 @limiter.limit(settings.rate_limit_api)
@@ -638,16 +631,17 @@ async def process_existing_file(request: Request):
     try:
         data = await request.json()
         file_path = data.get('file_path')
-        
+        source_id = data.get('source_id', 'sample')
+
         if not file_path:
             raise HTTPException(
                 status_code=400,
                 detail="File path is required"
             )
-        
+
         data_source_dir = get_data_source_directory()
         full_file_path = data_source_dir / file_path
-        
+
         if not full_file_path.exists():
             raise HTTPException(
                 status_code=404,
@@ -715,10 +709,18 @@ async def process_existing_file(request: Request):
             detected_mappings['amount_column'] = amount_columns[0]
         
         # Prepare processed data
+        mapped_cols = {
+            detected_mappings.get('date_column'),
+            detected_mappings.get('description_column'),
+            detected_mappings.get('amount_column'),
+        }
+        additional_columns = [c for c in columns if c not in mapped_cols]
+
         processed_data = {
             "columns": columns,
             "sample_data": sample_data,
             "detected_mappings": detected_mappings,
+            "additional_columns": additional_columns,
             "total_rows": len(df),
             "message": f"Successfully processed {file_path} with {len(columns)} columns and {len(df)} rows"
         }

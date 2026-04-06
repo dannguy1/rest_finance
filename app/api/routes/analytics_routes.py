@@ -44,12 +44,12 @@ SOURCE_CONFIGS = {
         "description": "Restaurant Depot supplier receipt processing and management"
     },
     "gg": {
-        "name": "GG",
+        "name": "gg",  # Use lowercase for directory name
         "icon": "credit-card",
         "description": "GG merchant statement processing and management"
     },
     "ar": {
-        "name": "AR",
+        "name": "ar",  # Use lowercase for directory name
         "icon": "credit-card",
         "description": "AR merchant statement processing and management"
     }
@@ -131,51 +131,98 @@ async def analytics_monthly_summary(
     # Load the file data
     df = await load_file_data(source_enum, fileType, filePath)
     
-    # Convert date column to datetime
-    date_column = get_date_column(source_enum)
-    df[date_column] = pd.to_datetime(df[date_column])
-    
-    # Group by month
-    df['month'] = df[date_column].dt.to_period('M')
-    monthly_data = df.groupby('month').agg({
-        'Amount': ['sum', 'count']
-    }).round(2)
-    
-    monthly_data.columns = ['amount', 'count']
-    monthly_data = monthly_data.reset_index()
-    
-    # Convert to list of dictionaries with proper type conversion
-    monthly_summary = []
-    for _, row in monthly_data.iterrows():
-        monthly_summary.append({
-            'month': str(row['month']),
-            'amount': float(row['amount']),
-            'count': int(row['count'])
-        })
-    
-    # Calculate summary statistics with proper type conversion
-    total_transactions = int(df['Amount'].count())
-    total_amount = float(df['Amount'].sum())
-    average_per_month = float(total_amount / len(monthly_summary)) if monthly_summary else 0.0
-    
-    # Find highest and lowest months
-    if monthly_summary:
-        highest_month = max(monthly_summary, key=lambda x: x['amount'])
-        lowest_month = min(monthly_summary, key=lambda x: x['amount'])
+    # For GG files, calculate both GROSS and NET totals
+    if source_enum == "gg" and 'GROSS' in df.columns and 'NET' in df.columns:
+        # Convert date column to datetime
+        if 'FULL_DATE' in df.columns:
+            df['FULL_DATE'] = pd.to_datetime(df['FULL_DATE'])
+            df['month'] = df['FULL_DATE'].dt.to_period('M')
+        else:
+            date_column = get_date_column(source_enum)
+            df[date_column] = pd.to_datetime(df[date_column])
+            df['month'] = df[date_column].dt.to_period('M')
+        
+        # Group by month and sum GROSS and NET
+        monthly_data = df.groupby('month').agg({
+            'GROSS': 'sum',
+            'NET': 'sum',
+            'REF': 'count'  # Count transactions
+        }).round(2)
+        
+        monthly_data.columns = ['gross', 'net', 'count']
+        monthly_data = monthly_data.reset_index()
+        
+        # Convert to list of dictionaries
+        monthly_summary = []
+        for _, row in monthly_data.iterrows():
+            monthly_summary.append({
+                'month': str(row['month']),
+                'gross': float(row['gross']),
+                'net': float(row['net']),
+                'count': int(row['count'])
+            })
+        
+        # Calculate totals
+        total_transactions = int(df['REF'].count())
+        total_gross = float(df['GROSS'].sum())
+        total_net = float(df['NET'].sum())
+        
+        return {
+            "source": source_enum,
+            "file_type": fileType,
+            "file_path": filePath,
+            "monthly_data": monthly_summary,
+            "total_transactions": total_transactions,
+            "total_gross": round(total_gross, 2),
+            "total_net": round(total_net, 2)
+        }
     else:
-        highest_month = lowest_month = None
-    
-    return {
-        "source": source_enum,
-        "file_type": fileType,
-        "file_path": filePath,
-        "monthly_data": monthly_summary,
-        "total_transactions": total_transactions,
-        "total_amount": total_amount,
-        "average_per_month": average_per_month,
-        "highest_month": str(highest_month['month']) if highest_month else None,
-        "lowest_month": str(lowest_month['month']) if lowest_month else None
-    }
+        # Original logic for other sources
+        # Convert date column to datetime
+        date_column = get_date_column(source_enum)
+        df[date_column] = pd.to_datetime(df[date_column])
+        
+        # Group by month
+        df['month'] = df[date_column].dt.to_period('M')
+        monthly_data = df.groupby('month').agg({
+            'Amount': ['sum', 'count']
+        }).round(2)
+        
+        monthly_data.columns = ['amount', 'count']
+        monthly_data = monthly_data.reset_index()
+        
+        # Convert to list of dictionaries with proper type conversion
+        monthly_summary = []
+        for _, row in monthly_data.iterrows():
+            monthly_summary.append({
+                'month': str(row['month']),
+                'amount': float(row['amount']),
+                'count': int(row['count'])
+            })
+        
+        # Calculate summary statistics with proper type conversion
+        total_transactions = int(df['Amount'].count())
+        total_amount = float(df['Amount'].sum())
+        average_per_month = float(total_amount / len(monthly_summary)) if monthly_summary else 0.0
+        
+        # Find highest and lowest months
+        if monthly_summary:
+            highest_month = max(monthly_summary, key=lambda x: x['amount'])
+            lowest_month = min(monthly_summary, key=lambda x: x['amount'])
+        else:
+            highest_month = lowest_month = None
+        
+        return {
+            "source": source_enum,
+            "file_type": fileType,
+            "file_path": filePath,
+            "monthly_data": monthly_summary,
+            "total_transactions": total_transactions,
+            "total_amount": total_amount,
+            "average_per_month": average_per_month,
+            "highest_month": str(highest_month['month']) if highest_month else None,
+            "lowest_month": str(lowest_month['month']) if lowest_month else None
+        }
 
 
 @router.get("/{source}/amount-analysis")
@@ -320,7 +367,9 @@ async def load_file_data(source_enum: str, file_type: str, file_path: str):
         "BankOfAmerica": "bankofamerica",
         "Chase": "chase", 
         "RestaurantDepot": "restaurantdepot",
-        "Sysco": "sysco"
+        "Sysco": "sysco",
+        "gg": "gg",
+        "ar": "ar"
     }
     
     source_dir = source_to_dir.get(source_enum, source_enum.lower())
@@ -378,6 +427,18 @@ async def load_file_data(source_enum: str, file_type: str, file_path: str):
     # Normalize column names for analytics
     df.columns = df.columns.str.strip()
 
+    # For GG files, keep original columns (GROSS, NET, REF, FULL_DATE, etc.)
+    if source_enum == "gg":
+        # Ensure GROSS and NET are numeric
+        if 'GROSS' in df.columns:
+            df['GROSS'] = pd.to_numeric(df['GROSS'], errors='coerce')
+        if 'NET' in df.columns:
+            df['NET'] = pd.to_numeric(df['NET'], errors='coerce')
+        # Remove rows with NaN values
+        df = df.dropna(subset=['GROSS', 'NET'] if 'GROSS' in df.columns and 'NET' in df.columns else [])
+        return df
+
+    # For other sources, normalize columns
     # Ensure Amount column exists and is numeric
     amount_column = get_amount_column(source_enum)
     if amount_column not in df.columns:

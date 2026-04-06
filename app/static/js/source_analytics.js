@@ -51,10 +51,16 @@ class SourceAnalyticsApp {
         const fileType = urlParams.get('fileType');
         const filePath = urlParams.get('filePath');
         
+        console.log('Analytics page URL params:', { fileType, filePath });
+        console.log('Current URL:', window.location.href);
+        
         if (fileType && filePath) {
             this.currentFile = { type: fileType, path: filePath };
+            console.log('Current file set:', this.currentFile);
             this.showFileInfo();
             this.loadGroupByDescription();
+        } else {
+            console.log('No file parameters found in URL');
         }
     }
 
@@ -152,28 +158,45 @@ class SourceAnalyticsApp {
         if (results && stats) {
             results.style.display = 'block';
             
+            // Check if this is GG data (has gross and net) or regular data (has total_amount)
+            const isGGData = data.total_gross !== undefined && data.total_net !== undefined;
+            
             // Display statistics
-            stats.innerHTML = `
-                <div class="mb-3">
-                    <strong>Total Transactions:</strong> ${data.total_transactions}
-                </div>
-                <div class="mb-3">
-                    <strong>Total Amount:</strong> $${data.total_amount.toFixed(2)}
-                </div>
-                <div class="mb-3">
-                    <strong>Average per Month:</strong> $${data.average_per_month.toFixed(2)}
-                </div>
-                <div class="mb-3">
-                    <strong>Highest Month:</strong> ${data.highest_month}
-                </div>
-            `;
+            if (isGGData) {
+                stats.innerHTML = `
+                    <div class="mb-3">
+                        <strong>Total Transactions:</strong> ${data.total_transactions}
+                    </div>
+                    <div class="mb-3">
+                        <strong>Total GROSS:</strong> $${data.total_gross.toFixed(2)}
+                    </div>
+                    <div class="mb-3">
+                        <strong>Total NET:</strong> $${data.total_net.toFixed(2)}
+                    </div>
+                `;
+            } else {
+                stats.innerHTML = `
+                    <div class="mb-3">
+                        <strong>Total Transactions:</strong> ${data.total_transactions}
+                    </div>
+                    <div class="mb-3">
+                        <strong>Total Amount:</strong> $${data.total_amount.toFixed(2)}
+                    </div>
+                    <div class="mb-3">
+                        <strong>Average per Month:</strong> $${data.average_per_month.toFixed(2)}
+                    </div>
+                    <div class="mb-3">
+                        <strong>Highest Month:</strong> ${data.highest_month}
+                    </div>
+                `;
+            }
             
             // Create chart
-            this.createMonthlyChart(data.monthly_data);
+            this.createMonthlyChart(data.monthly_data, isGGData);
         }
     }
 
-    createMonthlyChart(monthlyData) {
+    createMonthlyChart(monthlyData, isGGData = false) {
         const ctx = document.getElementById('monthly-chart');
         if (!ctx) return;
 
@@ -182,42 +205,97 @@ class SourceAnalyticsApp {
             this.charts.monthly.destroy();
         }
 
-        this.charts.monthly = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: monthlyData.map(d => d.month),
-                datasets: [{
-                    label: 'Total Amount',
-                    data: monthlyData.map(d => d.amount),
-                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            callback: function(value) {
-                                return '$' + value.toFixed(2);
+        if (isGGData) {
+            // GG data has both gross and net
+            this.charts.monthly = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: monthlyData.map(d => d.month),
+                    datasets: [
+                        {
+                            label: 'GROSS',
+                            data: monthlyData.map(d => d.gross),
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'NET',
+                            data: monthlyData.map(d => d.net),
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toFixed(2);
+                                }
                             }
                         }
-                    }
-                },
-                plugins: {
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                return 'Amount: $' + context.parsed.y.toFixed(2);
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    label += '$' + context.parsed.y.toFixed(2);
+                                    return label;
+                                }
                             }
                         }
                     }
                 }
-            }
-        });
+            });
+        } else {
+            // Regular data has amount
+            this.charts.monthly = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: monthlyData.map(d => d.month),
+                    datasets: [{
+                        label: 'Total Amount',
+                        data: monthlyData.map(d => d.amount),
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toFixed(2);
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return 'Amount: $' + context.parsed.y.toFixed(2);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
     }
 
     async loadAmountAnalysis() {

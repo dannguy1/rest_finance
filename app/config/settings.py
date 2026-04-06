@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     """Application settings with environment variable support."""
     
     # Application settings
-    app_name: str = "Financial Data Processor"
+    app_name: str = "Garlic and Chives"
     debug: bool = API_DEBUG
     host: str = API_HOST
     port: int = API_PORT

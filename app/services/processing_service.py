@@ -6,13 +6,14 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import asyncio
+import dataclasses
 from datetime import datetime, timedelta
 from app.config import settings
 from app.utils.logging import processing_logger
 from app.utils.file_utils import FileUtils
 from app.utils.csv_utils import CSVUtils
-from app.models.file_models import ProcessingOptions, ProcessingResult
-from dataclasses import dataclass
+from app.models.file_models import ProcessingOptions
+from dataclasses import dataclass, field
 from app.config.source_mapping import mapping_manager
 from app.utils.csv_loader import load_csv_robust
 
@@ -32,7 +33,7 @@ class ProcessingResult:
     success: bool
     files_processed: int
     output_files: List[str]
-    processing_time: float
+    processing_time: float = 0.0
     error_message: Optional[str] = None
 
 
@@ -377,7 +378,14 @@ class DataProcessor:
             FileUtils.ensure_directory(output_dir)
             
             # Generate CSV content
-            csv_content = CSVUtils.generate_csv_content(month_data, options.model_dump())
+            # Support both Pydantic v1 (dict) and v2 (model_dump)
+            if hasattr(options, 'model_dump'):
+                options_dict = options.model_dump()
+            elif hasattr(options, 'dict'):
+                options_dict = options.dict()
+            else:
+                options_dict = {}
+            csv_content = CSVUtils.generate_csv_content(month_data, options_dict)
             
             # Write to file
             output_file = output_dir / f"{month_part}_{year}.csv"
@@ -435,7 +443,11 @@ class DataProcessor:
             return {"total_files": 0, "total_records": 0, "total_amount": 0.0}
 
     async def process_single_file(self, source: str, filename: str, options: Optional[ProcessingOptions] = None) -> ProcessingResult:
-        """Process a single file for a specific source."""
+        """
+        Process a single file for a specific source.
+        Handles both PDF (extract then process) and CSV (process directly).
+        For GG merchant PDFs: extract and rename/move the CSV as-is without modification.
+        """
         start_time = datetime.now()
         
         if options is None:
@@ -448,6 +460,7 @@ class DataProcessor:
             
             # 1. Get the specific file using source ID directly
             file_path = self.data_dir / source / "input" / filename
+            
             if not file_path.exists():
                 return ProcessingResult(
                     success=False,
@@ -457,10 +470,81 @@ class DataProcessor:
                     error_message=f"File {filename} not found for {source}"
                 )
             
-            # 2. Parse the specific file
-            parsed_data = await self._parse_single_file(file_path, source)
+            # 2. If PDF file, extract to CSV first
+            csv_path = file_path
+            extracted_csv = None
+            if filename.lower().endswith('.pdf'):
+                processing_logger.log_system_event(
+                    f"PDF file detected: {filename}, extracting data...", level="info"
+                )
+                from app.services.pdf_service import pdf_service
+                
+                extracted_csv = pdf_service.process_merchant_statement(file_path, source)
+                if not extracted_csv or not extracted_csv.exists():
+                    return ProcessingResult(
+                        success=False,
+                        files_processed=0,
+                        output_files=[],
+                        processing_time=(datetime.now() - start_time).total_seconds(),
+                        error_message=f"Failed to extract data from PDF: {filename}"
+                    )
+                
+                csv_path = extracted_csv
+                processing_logger.log_system_event(
+                    f"PDF extraction successful: {filename} -> {csv_path.name}", level="info"
+                )
+                
+                # For GG merchant PDFs, just rename and move the extracted CSV as-is
+                if source == "gg":
+                    import pandas as pd
+                    import shutil
+                    
+                    # Read the CSV to get the date from first row
+                    df = pd.read_csv(csv_path)
+                    if len(df) == 0:
+                        return ProcessingResult(
+                            success=False,
+                            files_processed=0,
+                            output_files=[],
+                            processing_time=(datetime.now() - start_time).total_seconds(),
+                            error_message=f"Extracted CSV is empty: {csv_path.name}"
+                        )
+                    
+                    # Get year and month from FULL_DATE column
+                    first_date = pd.to_datetime(df['FULL_DATE'].iloc[0])
+                    year = first_date.year
+                    month = first_date.month
+                    
+                    # Create output directory
+                    output_dir = self.data_dir / source / "output" / str(year)
+                    FileUtils.ensure_directory(output_dir)
+                    
+                    # Copy the file with the new name: MM_YYYY.csv
+                    output_file = output_dir / f"{month:02d}_{year}.csv"
+                    shutil.copy2(csv_path, output_file)
+                    
+                    processing_logger.log_file_operation(
+                        "copy", output_file.name, source, True, 
+                        f"Copied extracted CSV as-is from {csv_path.name}"
+                    )
+                    
+                    processing_time = (datetime.now() - start_time).total_seconds()
+                    processing_logger.log_processing_job(
+                        "system", source, "completed", 100.0, 
+                        f"Processing completed for {source} file {filename}"
+                    )
+                    
+                    return ProcessingResult(
+                        success=True,
+                        files_processed=1,
+                        output_files=[str(output_file)],
+                        processing_time=processing_time
+                    )
+            
+            # 3. Parse the CSV file (original or extracted)
+            parsed_data = await self._parse_single_file(csv_path, source)
             processing_logger.log_system_event(
-                f"[DEBUG] Parsed {len(parsed_data)} transactions from {filename}", level="info"
+                f"[DEBUG] Parsed {len(parsed_data)} transactions from {csv_path.name}", level="info"
             )
             if parsed_data:
                 processing_logger.log_system_event(
@@ -468,14 +552,16 @@ class DataProcessor:
                 )
             else:
                 processing_logger.log_system_event(
-                    f"[DEBUG] No transactions parsed from {filename}", level="warning"
+                    f"[DEBUG] No transactions parsed from {csv_path.name}", level="warning"
                 )
-            # 3. Group by month only
+            
+            # 4. Group by month only
             grouped_data = CSVUtils.group_transactions_by_month(parsed_data)
             processing_logger.log_system_event(
                 f"[DEBUG] Grouping keys: {list(grouped_data.keys())}", level="info"
             )
-            # 4. Generate monthly CSV files for all years found in the data
+            
+            # 5. Generate monthly CSV files for all years found in the data
             output_files = []
             for month_key in grouped_data.keys():
                 year_part, month_part = month_key.split('_')
@@ -496,8 +582,10 @@ class DataProcessor:
                 processing_time=processing_time
             )
         except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
             processing_logger.log_processing_job(
-                "system", source, "error", 0.0, f"Processing failed for {source} file {filename}: {str(e)}"
+                "system", source, "error", 0.0, f"Processing failed for {source} file {filename}: {str(e)}\n{error_details}"
             )
             return ProcessingResult(
                 success=False,

@@ -1,6 +1,7 @@
 """
 Data processing routes for Financial Data Processor.
 """
+import dataclasses
 from typing import List, Optional
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Request
@@ -78,7 +79,7 @@ SOURCE_CONFIGS = {
         "date_format": "MM/DD/YYYY"
     },
     "gg": {
-        "name": "GG",
+        "name": "gg",  # Use lowercase for directory name
         "display_name": "GG",
         "description": "GG merchant statement processing",
         "required_columns": ["Date", "Description", "Amount"],
@@ -88,7 +89,7 @@ SOURCE_CONFIGS = {
         "date_format": "MM/DD/YYYY"
     },
     "ar": {
-        "name": "AR",
+        "name": "ar",  # Use lowercase for directory name
         "display_name": "AR",
         "description": "AR merchant statement processing",
         "required_columns": ["Date", "Description", "Amount"],
@@ -139,7 +140,65 @@ async def process_data(
         )
     
     return {
-        **result.dict(),
+        **dataclasses.asdict(result),
+        "source_display": source_config["display_name"],
+        "description": source_config["description"],
+        "expected_format": {
+            "required_columns": source_config["required_columns"],
+            "date_format": source_config["date_format"],
+            "optional_columns": source_config.get("optional_columns", [])
+        }
+    }
+
+@router.post("/process-file/{source}/{filename}")
+@limiter.limit(settings.rate_limit_process)
+@handle_service_errors
+async def process_single_file(
+    source: str,
+    filename: str,
+    request: Request,
+    options: Optional[ProcessingOptions] = None
+):
+    """
+    Process a single file (PDF or CSV) for a specific source.
+    
+    For PDF files:
+      1. Extracts data to CSV in input directory
+      2. Processes the extracted CSV
+      3. Generates monthly output files
+    
+    For CSV files:
+      1. Processes directly
+      2. Generates monthly output files
+    """
+    source_config = get_source_config(source)
+    source_enum = source_config["name"]
+    
+    processing_logger.log_processing_job(
+        "api", source_enum, "started", 0.0, f"Processing file {filename} for {source_config['display_name']}"
+    )
+    
+    # Process the single file
+    result = await processor.process_single_file(source_enum, filename, options)
+    
+    if result.success:
+        processing_logger.log_processing_job(
+            "api", source_enum, "completed", 100.0, 
+            f"File {filename} processed successfully for {source_config['display_name']}"
+        )
+    else:
+        processing_logger.log_processing_job(
+            "api", source_enum, "error", 0.0, 
+            f"Failed to process {filename} for {source_config['display_name']}: {result.error_message}"
+        )
+    
+    return {
+        "success": result.success,
+        "files_processed": result.files_processed,
+        "output_files": result.output_files,
+        "processing_time": result.processing_time,
+        "error_message": result.error_message,
+        "filename": filename,
         "source_display": source_config["display_name"],
         "description": source_config["description"],
         "expected_format": {
@@ -184,7 +243,7 @@ async def get_processing_status(source: str, request: Request):
     )
     
     return {
-        **status.dict(),
+        **status.model_dump(),
         "source_display": source_config["display_name"],
         "description": source_config["description"],
         "years_processed": years

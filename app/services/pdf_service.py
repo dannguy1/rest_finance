@@ -295,18 +295,32 @@ class PDFService:
             self.logger.log_system_event(f"Error extracting vendor table: {e}", level="error")
             return None
 
-    def process_merchant_statement(self, pdf_path: Path, source: str, year: int) -> Optional[Path]:
+    def process_merchant_statement(self, pdf_path: Path, source: str) -> Optional[Path]:
         """
         Process a merchant statement PDF and convert to CSV.
+        Automatically detects year from filename or uses current year.
+        
         Args:
             pdf_path: Path to PDF file
             source: Source identifier (e.g., 'gg', 'ar')
-            year: Year to add to date column
+            
         Returns:
             Path to generated CSV or None
         """
         try:
+            # For GG merchant statements, use the specialized extraction script
+            if source.lower() == 'gg':
+                return self._process_gg_merchant_statement(pdf_path)
+            
+            # For other vendors, use the existing vendor configuration method
+            # Try to extract year from filename
+            import re
+            filename = pdf_path.stem
+            year_match = re.search(r'(20\d{2})', filename)
+            year = int(year_match.group(1)) if year_match else datetime.now().year
+            
             # Validate that PDF extraction is enabled for this vendor
+            from app.utils.pdf_table_extractor import load_vendor_config
             config = load_vendor_config(source)
             pdf_config = config.get("pdf_extraction", {})
             
@@ -326,6 +340,78 @@ class PDFService:
                 
         except Exception as e:
             self.logger.log_system_event(f"Error processing merchant statement: {e}", level="error")
+            return None
+    
+    def _process_gg_merchant_statement(self, pdf_path: Path) -> Optional[Path]:
+        """
+        Process a GG merchant statement PDF using the specialized extraction script.
+        
+        Args:
+            pdf_path: Path to PDF file
+            
+        Returns:
+            Path to generated CSV or None
+        """
+        try:
+            import subprocess
+            import sys
+            
+            # Determine output path
+            output_csv = pdf_path.parent / f"{pdf_path.stem}_batches.csv"
+            
+            # Get the path to our extraction script
+            script_path = Path(__file__).parent.parent.parent / "scripts" / "extract_gg_merchant_batches.py"
+            
+            if not script_path.exists():
+                self.logger.log_system_event(f"GG extraction script not found: {script_path}", level="error")
+                return None
+            
+            # Run the extraction script
+            self.logger.log_system_event(f"Running GG merchant extraction: {pdf_path}", level="info")
+            
+            result = subprocess.run(
+                [sys.executable, str(script_path), str(pdf_path), str(output_csv)],
+                capture_output=True,
+                text=True,
+                timeout=60  # 60 second timeout
+            )
+            
+            if result.returncode == 0:
+                if output_csv.exists():
+                    self.logger.log_system_event(
+                        f"Successfully extracted GG merchant batches to: {output_csv}", 
+                        level="info",
+                        details={"stdout": result.stdout}
+                    )
+                    return output_csv
+                else:
+                    self.logger.log_system_event(
+                        f"GG extraction script completed but CSV not found: {output_csv}", 
+                        level="error"
+                    )
+                    return None
+            else:
+                self.logger.log_system_event(
+                    f"GG extraction script failed with code {result.returncode}", 
+                    level="error",
+                    details={
+                        "stderr": result.stderr,
+                        "stdout": result.stdout
+                    }
+                )
+                return None
+                
+        except subprocess.TimeoutExpired:
+            self.logger.log_system_event(
+                f"GG extraction script timed out for {pdf_path}", 
+                level="error"
+            )
+            return None
+        except Exception as e:
+            self.logger.log_system_event(
+                f"Error running GG extraction script: {str(e)}", 
+                level="error"
+            )
             return None
 
 
