@@ -68,7 +68,6 @@ async def list_sample_files(request: Request):
                     'name': file_path.name,
                     'path': str(relative_path),
                     'size': f"{file_path.stat().st_size / 1024:.1f} KB",
-                    'full_path': str(file_path)
                 })
 
         sample_files.sort(key=lambda x: x['name'])
@@ -110,19 +109,19 @@ async def create_source_mapping(mapping: SourceMappingConfig, request: Request):
             "Sample data is required. Please provide example_data in the mapping configuration.",
             {"source_id": mapping.source_id}
         )
-        
-        # Validate the mapping with sample data
-        validation_result = mapping_validation_service.validate_mapping_comprehensive(
-            mapping, 
-            sample_data=mapping.example_data
+
+    # Validate the mapping with sample data
+    validation_result = mapping_validation_service.validate_mapping_comprehensive(
+        mapping,
+        sample_data=mapping.example_data
+    )
+
+    if not validation_result["valid"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid mapping configuration: {'; '.join(validation_result['errors'])}"
         )
-        
-        if not validation_result["valid"]:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid mapping configuration: {'; '.join(validation_result['errors'])}"
-            )
-        
+
     # Check if mapping already exists
     existing = mapping_manager.get_mapping(mapping.source_id)
     if existing:
@@ -631,12 +630,18 @@ async def process_existing_file(request: Request):
     try:
         data = await request.json()
         file_path = data.get('file_path')
-        source_id = data.get('source_id', 'sample')
+        source_id = data.get('source_id')
 
         if not file_path:
             raise HTTPException(
                 status_code=400,
                 detail="File path is required"
+            )
+
+        if not source_id:
+            raise HTTPException(
+                status_code=400,
+                detail="source_id is required"
             )
 
         data_source_dir = get_data_source_directory()

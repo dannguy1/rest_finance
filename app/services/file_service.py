@@ -2,6 +2,8 @@
 File service for handling file system operations.
 """
 import shutil
+import os
+import asyncio
 from pathlib import Path
 from typing import List, Optional
 import aiofiles
@@ -28,6 +30,7 @@ class FileService:
     def __init__(self, data_dir: Optional[str] = None):
         """Initialize file service."""
         self.data_dir = Path(data_dir) if data_dir else settings.data_path
+        self._output_cleanup_lock = asyncio.Lock()
         processing_logger.log_system_event("FileService initialized", {"data_dir": str(self.data_dir)})
     
     async def save_uploaded_file(self, source: str, file, filename: str) -> bool:
@@ -229,7 +232,16 @@ class FileService:
             file_path.unlink()
             processing_logger.log_file_operation("delete", filename, source, True)
 
-            cleanup = await self._remove_entries_from_outputs(source, filename)
+            try:
+                cleanup = await self._remove_entries_from_outputs(source, filename)
+            except Exception as e:
+                processing_logger.log_system_event(
+                    f"Cleanup of processed outputs failed after deleting '{filename}' — "
+                    "output CSVs may still contain references to the deleted file.",
+                    level="warning",
+                    details={"error": str(e), "source": source}
+                )
+                cleanup = {"output_files_modified": 0, "output_files_deleted": 0, "rows_removed": 0}
             return {"success": True, **cleanup}
 
         except AppFileNotFoundError:
@@ -280,46 +292,49 @@ class FileService:
                 "rows_removed": 0,
             }
 
-        for csv_path in sorted(output_dir.rglob("*.csv")):
-            try:
-                df = pd.read_csv(csv_path)
-            except Exception as e:
-                processing_logger.log_system_event(
-                    f"Could not read output file during cleanup: {csv_path}",
-                    level="warning",
-                    details={"error": str(e)}
-                )
-                continue
-
-            if "Source File" not in df.columns:
-                continue
-
-            before = len(df)
-            df = df[df["Source File"] != filename]
-            removed = before - len(df)
-
-            if removed == 0:
-                continue
-
-            rows_removed += removed
-
-            if df.empty:
-                csv_path.unlink()
-                files_deleted += 1
-                processing_logger.log_file_operation(
-                    "delete", csv_path.name, source, True
-                )
-                # Remove empty year directory
+        async with self._output_cleanup_lock:
+            for csv_path in sorted(output_dir.rglob("*.csv")):
                 try:
-                    csv_path.parent.rmdir()
-                except OSError:
-                    pass  # Directory not empty — leave it
-            else:
-                df.to_csv(csv_path, index=False)
-                files_modified += 1
-                processing_logger.log_file_operation(
-                    "update", csv_path.name, source, True
-                )
+                    df = pd.read_csv(csv_path)
+                except Exception as e:
+                    processing_logger.log_system_event(
+                        f"Could not read output file during cleanup: {csv_path}",
+                        level="warning",
+                        details={"error": str(e)}
+                    )
+                    continue
+
+                if "Source File" not in df.columns:
+                    continue
+
+                before = len(df)
+                df = df[df["Source File"] != filename]
+                removed = before - len(df)
+
+                if removed == 0:
+                    continue
+
+                rows_removed += removed
+
+                if df.empty:
+                    csv_path.unlink()
+                    files_deleted += 1
+                    processing_logger.log_file_operation(
+                        "delete", csv_path.name, source, True
+                    )
+                    # Remove empty year directory
+                    try:
+                        csv_path.parent.rmdir()
+                    except OSError:
+                        pass  # Directory not empty — leave it
+                else:
+                    tmp_path = csv_path.with_suffix('.tmp')
+                    df.to_csv(tmp_path, index=False)
+                    os.replace(tmp_path, csv_path)
+                    files_modified += 1
+                    processing_logger.log_file_operation(
+                        "update", csv_path.name, source, True
+                    )
 
         if rows_removed:
             processing_logger.log_system_event(

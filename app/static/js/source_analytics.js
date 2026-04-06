@@ -483,16 +483,16 @@ class SourceAnalyticsApp {
             // Display insights
             insights.innerHTML = `
                 <div class="mb-3">
-                    <strong>Trend Direction:</strong> ${data.trend_direction}
+                    <strong>Trend Direction:</strong> ${this._escapeHtml(data.trend_direction)}
                 </div>
                 <div class="mb-3">
-                    <strong>Growth Rate:</strong> ${data.growth_rate}%
+                    <strong>Growth Rate:</strong> ${this._escapeHtml(String(data.growth_rate))}%
                 </div>
                 <div class="mb-3">
-                    <strong>Peak Month:</strong> ${data.peak_month}
+                    <strong>Peak Month:</strong> ${this._escapeHtml(data.peak_month)}
                 </div>
                 <div class="mb-3">
-                    <strong>Lowest Month:</strong> ${data.lowest_month}
+                    <strong>Lowest Month:</strong> ${this._escapeHtml(data.lowest_month)}
                 </div>
             `;
             
@@ -577,11 +577,13 @@ class SourceAnalyticsApp {
         const old = document.getElementById('descriptionDetailModal');
         if (old) old.remove();
 
-        // Remove any orphaned backdrops
-        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-        document.body.classList.remove('modal-open');
-        document.body.style.removeProperty('overflow');
-        document.body.style.removeProperty('padding-right');
+        // Only remove backdrops left over from a previous detail modal (not other open modals)
+        if (!document.querySelector('.modal.show')) {
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style.removeProperty('overflow');
+            document.body.style.removeProperty('padding-right');
+        }
 
         // Build modal HTML dynamically (matches source.js pattern)
         const modalHtml = `
@@ -674,8 +676,10 @@ class SourceAnalyticsApp {
             focus: true
         });
 
-        // Clean up element after modal closes
+        // Clean up element after modal closes; also abort any in-flight fetch
+        const abortController = new AbortController();
         modalEl.addEventListener('hidden.bs.modal', () => {
+            abortController.abort();
             if (this._detailModalInstance) {
                 this._detailModalInstance.dispose();
                 this._detailModalInstance = null;
@@ -692,9 +696,12 @@ class SourceAnalyticsApp {
                 + `&fileType=${this.currentFile.type}`
                 + `&filePath=${encodeURIComponent(this.currentFile.path)}`;
 
-            const response = await fetch(url);
+            const response = await fetch(url, { signal: abortController.signal });
             if (!response.ok) throw new Error(`Server error: ${response.status}`);
             const data = await response.json();
+
+            // Guard: modal may have been closed while fetching
+            if (!document.getElementById('descriptionDetailModal')) return;
 
             this._detailData = data;
 
@@ -727,8 +734,11 @@ class SourceAnalyticsApp {
             document.getElementById('detail-modal-table-wrapper').style.display = 'block';
 
         } catch (err) {
-            document.getElementById('detail-modal-loading').style.display = 'none';
+            // AbortError means the modal was closed before the fetch completed — ignore silently
+            if (err.name === 'AbortError') return;
             const errorDiv = document.getElementById('detail-modal-error');
+            if (!errorDiv) return;
+            document.getElementById('detail-modal-loading').style.display = 'none';
             errorDiv.style.display = 'block';
             errorDiv.textContent   = 'Failed to load transactions: ' + err.message;
         }
