@@ -1,11 +1,14 @@
 import re
 import json
+import logging
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
 import pandas as pd
 import fitz  # PyMuPDF
 from datetime import datetime
 from difflib import get_close_matches
+
+logger = logging.getLogger(__name__)
 
 
 def load_vendor_config(vendor: str) -> Dict[str, Any]:
@@ -227,8 +230,8 @@ def _find_column_line(lines: List[str], expected_columns: List[str], debug: bool
                         idx = norm_parts.index(close[0])
                         mapping[exp] = parts[idx]
             if debug:
-                print(f"[DEBUG] Candidate header line {i}: {line}")
-                print(f"[DEBUG] Mapping: {mapping}")
+                logger.debug("Candidate header line %d: %s", i, line)
+                logger.debug("Mapping: %s", mapping)
             return i, candidate_lines, mapping
         candidate_lines.append(line)
     return None, candidate_lines, {}
@@ -280,10 +283,10 @@ def extract_section_table_from_pdf(
     # Extract raw table data
     lines = section_text.splitlines()
     if debug:
-        print(f"[DEBUG] Section header found at index {section_start}")
-        print(f"[DEBUG] First 10 lines of section:")
+        logger.debug("Section header found at index %d", section_start)
+        logger.debug("First 10 lines of section:")
         for l in lines[:10]:
-            print(f"    {l}")
+            logger.debug("    %s", l)
 
     # Find header line flexibly
     col_line_idx, candidate_lines, mapping = _find_column_line(lines, columns, debug=debug)
@@ -320,7 +323,7 @@ def extract_section_table_from_pdf(
             if row[0] and row[2] and row[3]:
                 table.append(row[:len(columns)])
             elif debug:
-                print(f"[DEBUG] Skipped incomplete row: {row}")
+                logger.debug("Skipped incomplete row: %s", row)
         else:
             # fallback: whitespace split
             row = re.split(r"\s{2,}", line.strip())
@@ -329,7 +332,7 @@ def extract_section_table_from_pdf(
             if len(row) == len(columns):
                 table.append(row)
             elif debug:
-                print(f"[DEBUG] Skipped unmatched row: {row}")
+                logger.debug("Skipped unmatched row: %s", row)
     
     df = pd.DataFrame(table, columns=columns)
     
@@ -340,7 +343,8 @@ def extract_section_table_from_pdf(
         # Clean and validate rows
         df = _clean_and_validate_table(df, metadata)
         if debug:
-            print(f"[DEBUG] Table analysis: {metadata.valid_rows} valid rows, {metadata.invalid_rows} invalid rows removed")
+            logger.debug("Table analysis: %d valid rows, %d invalid rows removed",
+                         metadata.valid_rows, metadata.invalid_rows)
     if output_csv:
         df.to_csv(output_csv, index=False)
     return df

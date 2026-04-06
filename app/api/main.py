@@ -28,8 +28,14 @@ limiter = Limiter(key_func=get_remote_address)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
-    # Startup
+    # Startup: log + ensure required directories exist
     processing_logger.log_system_event("Application starting up", level="info")
+    from app.utils.file_utils import FileUtils
+    for source_dir in FileUtils.get_source_directories():
+        FileUtils.ensure_directory(source_dir / "input")
+        FileUtils.ensure_directory(source_dir / "output")
+    FileUtils.ensure_directory(settings.backup_path)
+    processing_logger.log_system_event("Application startup completed", level="info")
     yield
     # Shutdown
     processing_logger.log_system_event("Application shutting down", level="info")
@@ -79,29 +85,6 @@ app.include_router(mapping_routes.router, prefix="/api/mappings", tags=["Mapping
 app.include_router(sample_data.router, prefix="/api/sample-data", tags=["Sample Data"])
 app.include_router(verification_routes.router, tags=["Verification"])
 app.include_router(web_routes.router, tags=["Web"])
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Application startup event."""
-    processing_logger.log_system_event("Application starting up")
-    
-    # Ensure data directories exist
-    from app.utils.file_utils import FileUtils
-    for source_dir in FileUtils.get_source_directories():
-        FileUtils.ensure_directory(source_dir / "input")
-        FileUtils.ensure_directory(source_dir / "output")
-    
-    # Ensure backup directory exists
-    FileUtils.ensure_directory(settings.backup_path)
-    
-    processing_logger.log_system_event("Application startup completed")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Application shutdown event."""
-    processing_logger.log_system_event("Application shutting down")
 
 
 # Root endpoint is now handled by web_routes
