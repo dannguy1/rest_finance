@@ -50,17 +50,15 @@ window.app = {
         document.addEventListener('shown.bs.collapse', function(e) {
             const target = e.target;
             const trigger = document.querySelector(`[data-bs-target="#${target.id}"]`);
-            if (trigger) {
-                trigger.querySelector('.bi-chevron-right').style.transform = 'rotate(90deg)';
-            }
+            const chevron = trigger && trigger.querySelector('.bi-chevron-right');
+            if (chevron) chevron.style.transform = 'rotate(90deg)';
         });
 
         document.addEventListener('hidden.bs.collapse', function(e) {
             const target = e.target;
             const trigger = document.querySelector(`[data-bs-target="#${target.id}"]`);
-            if (trigger) {
-                trigger.querySelector('.bi-chevron-right').style.transform = 'rotate(0deg)';
-            }
+            const chevron = trigger && trigger.querySelector('.bi-chevron-right');
+            if (chevron) chevron.style.transform = 'rotate(0deg)';
         });
     },
 

@@ -87,6 +87,9 @@ async def run_verification(
     if not (1 <= month <= 12):
         return {"error": "month must be 1–12", "success": False}
 
+    if not (2000 <= year <= 2100):
+        return {"error": "year must be between 2000 and 2100", "success": False}
+
     processing_logger.log_system_event(
         f"Running deposit verification for {location_id} {year}-{month:02d}"
     )

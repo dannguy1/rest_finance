@@ -270,8 +270,8 @@
                 if (!a) return;
                 a.href = '/location/' + locId + '/' + feat;
                 a.dataset.path = '/location/' + locId + '/' + feat;
-                const sub = document.getElementById('nav-bank-subtitle');
-                if (feat === 'bank' && sub) sub.textContent = cfg.subtitle;
+                const sub = document.getElementById('nav-' + feat + '-subtitle');
+                if (sub) sub.textContent = cfg.subtitle;
             });
 
             // Active link highlight

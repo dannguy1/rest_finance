@@ -18,7 +18,7 @@ const Verification = (() => {
     // Resolve active location: server-injected → localStorage → default 'gg'
     function _resolveLocation() {
         if (window._preselect_location) return window._preselect_location;
-        try { return localStorage.getItem('activeLocation') || 'gg'; } catch { return 'gg'; }
+        try { return localStorage.getItem('active_location') || 'gg'; } catch { return 'gg'; }
     }
 
     // ------------------------------------------------------------------
