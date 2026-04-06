@@ -8,11 +8,18 @@ const Verification = (() => {
     let _configs = [];
     let _availableMonths = [];   // [{year, month}, ...]
     let _lastResult = null;
+    let _activeLocId = null;
 
     const MONTH_NAMES = [
         '', 'January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'
     ];
+
+    // Resolve active location: server-injected → localStorage → default 'gg'
+    function _resolveLocation() {
+        if (window._preselect_location) return window._preselect_location;
+        try { return localStorage.getItem('activeLocation') || 'gg'; } catch { return 'gg'; }
+    }
 
     // ------------------------------------------------------------------
     // Init
@@ -28,54 +35,23 @@ const Verification = (() => {
             if (!resp.ok) throw new Error('Failed to load configs');
             const data = await resp.json();
             _configs = data.configs || [];
-            _populateLocationSelect();
+            await _initForLocation(_resolveLocation());
         } catch (e) {
             _showError('Could not load verification configurations: ' + e.message);
         }
     }
 
-    function _populateLocationSelect() {
-        const sel = document.getElementById('location-select');
-        sel.innerHTML = '<option value="">Select location…</option>';
-        _configs.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.location_id;
-            opt.textContent = c.display_name;
-            sel.appendChild(opt);
-        });
-
-        // Auto-select location if pre-set by server (location-centric URL)
-        const preselect = window._preselect_location;
-        if (preselect) {
-            sel.value = preselect;
-            if (sel.value === preselect) {
-                _onLocationChange();
-            }
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // Event bindings
-    // ------------------------------------------------------------------
-    function _bindEvents() {
-        document.getElementById('location-select').addEventListener('change', _onLocationChange);
-        document.getElementById('year-select').addEventListener('change', _onYearChange);
-        document.getElementById('month-select').addEventListener('change', _onMonthChange);
-        document.getElementById('run-btn').addEventListener('click', _runVerification);
-        document.getElementById('export-btn').addEventListener('click', _exportCSV);
-    }
-
-    async function _onLocationChange() {
-        const locId = document.getElementById('location-select').value;
-        const yearSel = document.getElementById('year-select');
+    async function _initForLocation(locId) {
+        _activeLocId = locId;
+        const yearSel  = document.getElementById('year-select');
         const monthSel = document.getElementById('month-select');
-        const runBtn = document.getElementById('run-btn');
-        const infoEl = document.getElementById('source-info');
+        const runBtn   = document.getElementById('run-btn');
+        const infoEl   = document.getElementById('source-info');
 
-        yearSel.disabled = true; yearSel.innerHTML = '<option value="">—</option>';
+        yearSel.disabled  = true; yearSel.innerHTML  = '<option value="">—</option>';
         monthSel.disabled = true; monthSel.innerHTML = '<option value="">—</option>';
-        runBtn.disabled = true;
-        infoEl.innerHTML = '';
+        runBtn.disabled   = true;
+        infoEl.innerHTML  = '';
 
         if (!locId) return;
 
@@ -94,6 +70,15 @@ const Verification = (() => {
         } catch (e) {
             _showError('Could not load available months: ' + e.message);
         }
+    }
+    // ------------------------------------------------------------------
+    // Event bindings
+    // ------------------------------------------------------------------
+    function _bindEvents() {
+        document.getElementById('year-select').addEventListener('change', _onYearChange);
+        document.getElementById('month-select').addEventListener('change', _onMonthChange);
+        document.getElementById('run-btn').addEventListener('click', _runVerification);
+        document.getElementById('export-btn').addEventListener('click', _exportCSV);
     }
 
     function _populateYearSelect() {
@@ -136,7 +121,7 @@ const Verification = (() => {
     // Run verification
     // ------------------------------------------------------------------
     async function _runVerification() {
-        const locId  = document.getElementById('location-select').value;
+        const locId  = _activeLocId;
         const year   = document.getElementById('year-select').value;
         const month  = document.getElementById('month-select').value;
         if (!locId || !year || !month) return;
