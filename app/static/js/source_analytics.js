@@ -47,21 +47,14 @@ class SourceAnalyticsApp {
     }
 
     checkForSelectedFile() {
-        // Check if there's a file selected from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const fileType = urlParams.get('fileType');
         const filePath = urlParams.get('filePath');
-        
-        console.log('Analytics page URL params:', { fileType, filePath });
-        console.log('Current URL:', window.location.href);
-        
+
         if (fileType && filePath) {
             this.currentFile = { type: fileType, path: filePath };
-            console.log('Current file set:', this.currentFile);
             this.showFileInfo();
             this.loadGroupByDescription();
-        } else {
-            console.log('No file parameters found in URL');
         }
     }
 
@@ -114,10 +107,10 @@ class SourceAnalyticsApp {
             results.style.display = 'block';
             
             tbody.innerHTML = data.groups.map(group => {
-                const descEsc = group.description.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                const descEsc = this._escapeHtml(group.description);
                 return `
                 <tr>
-                    <td>${group.description}</td>
+                    <td>${descEsc}</td>
                     <td>${group.count}</td>
                     <td>$${group.total_amount.toFixed(2)}</td>
                     <td>$${group.average_amount.toFixed(2)}</td>

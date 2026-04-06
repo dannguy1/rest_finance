@@ -14,9 +14,8 @@ from app.utils.logging import processing_logger
 from app.services.processing_service import DataProcessor
 from app.services.file_service import FileService
 from app.models.file_models import (
-    SourceType, 
-    ProcessingOptions, 
-    ProcessingResult,
+    SourceType,
+    ProcessingOptions,
     ProcessingStatus,
     ProcessingProgress
 )

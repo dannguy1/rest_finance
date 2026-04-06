@@ -78,20 +78,24 @@ async def analytics_group_by_description(
     """Group data by description and provide summary statistics."""
     source_config = get_source_config(source)
     source_enum = source_config["name"]
-    
-    # Load the file data
+
     df = await load_file_data(source_enum, fileType, filePath)
-    
+
+    if 'Description' not in df.columns or 'Amount' not in df.columns:
+        raise HTTPException(
+            status_code=422,
+            detail="Group by Description is not available for this data source. "
+                   "The file does not contain Description and Amount columns."
+        )
+
     # Group by description
     description_groups = df.groupby('Description').agg({
         'Amount': ['count', 'sum', 'mean', 'min', 'max']
     }).round(2)
-    
-    # Flatten column names
+
     description_groups.columns = ['count', 'total_amount', 'average_amount', 'min_amount', 'max_amount']
     description_groups = description_groups.reset_index()
-    
-    # Convert to list of dictionaries
+
     groups = []
     for _, row in description_groups.iterrows():
         groups.append({
@@ -102,10 +106,9 @@ async def analytics_group_by_description(
             'min_amount': float(row['min_amount']),
             'max_amount': float(row['max_amount'])
         })
-    
-    # Sort by total amount descending
+
     groups.sort(key=lambda x: x['total_amount'], reverse=True)
-    
+
     return {
         "source": source_enum,
         "file_type": fileType,
@@ -131,9 +134,14 @@ async def analytics_group_by_description_detail(
 
     df = await load_file_data(source_enum, fileType, filePath)
 
-    # Filter rows matching the description
-    mask = df['Description'] == description
-    detail_df = df[mask].copy()
+    if 'Description' not in df.columns or 'Amount' not in df.columns:
+        raise HTTPException(
+            status_code=422,
+            detail="Detail view is not available for this data source. "
+                   "The file does not contain Description and Amount columns."
+        )
+
+    detail_df = df[df['Description'] == description].copy()
 
     # Sort by date column
     date_col = get_date_column(source_enum)
@@ -142,7 +150,6 @@ async def analytics_group_by_description_detail(
         detail_df = detail_df.sort_values(date_col)
         detail_df[date_col] = detail_df[date_col].dt.strftime('%Y-%m-%d')
 
-    # Build rows — include Date, Description, Amount, and any extra columns present
     col_date = date_col if date_col in detail_df.columns else None
     records = []
     for _, row in detail_df.iterrows():
@@ -151,7 +158,6 @@ async def analytics_group_by_description_detail(
             'description': str(row['Description']),
             'amount': float(row['Amount']),
         }
-        # Include optional extra columns if available
         for extra in ('Account', 'Simple Description', 'Source File'):
             if extra in detail_df.columns:
                 entry[extra.lower().replace(' ', '_')] = str(row[extra])
@@ -161,7 +167,7 @@ async def analytics_group_by_description_detail(
         "source": source_enum,
         "description": description,
         "count": len(records),
-        "total_amount": round(float(detail_df['Amount'].sum()), 2) if len(records) else 0.0,
+        "total_amount": round(float(detail_df['Amount'].sum()), 2) if records else 0.0,
         "records": records
     }
 
@@ -291,7 +297,14 @@ async def analytics_amount_analysis(
     
     # Load the file data
     df = await load_file_data(source_enum, fileType, filePath)
-    
+
+    if 'Amount' not in df.columns:
+        raise HTTPException(
+            status_code=422,
+            detail="Amount Analysis is not available for this data source. "
+                   "The file does not contain an Amount column."
+        )
+
     # Calculate basic statistics
     amounts = df['Amount']
     mean = amounts.mean()
@@ -351,7 +364,14 @@ async def analytics_trends(
     
     # Load the file data
     df = await load_file_data(source_enum, fileType, filePath)
-    
+
+    if 'Amount' not in df.columns:
+        raise HTTPException(
+            status_code=422,
+            detail="Trends Analysis is not available for this data source. "
+                   "The file does not contain an Amount column."
+        )
+
     # Convert date column to datetime
     date_column = get_date_column(source_enum)
     df[date_column] = pd.to_datetime(df[date_column])
