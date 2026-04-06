@@ -2,38 +2,44 @@
 
 A full-stack web application for processing and validating financial data from multiple sources with intelligent mapping and validation capabilities.
 
-## 🎯 Project Status (November 2024)
+## 🎯 Project Status
 
-**Current Phase**: Phases 1-3 Substantially Complete (69%)  
-**Production Launch Target**: Early January 2026  
-**Status**: ✅ Monitoring & Testing Infrastructure Complete
+**Overall**: Core functionality complete — processing, validation, PDF extraction, mapping, monitoring, and testing infrastructure are all implemented.
 
 ### Quick Links
-- **Implementation Progress**: [PHASES_1_2_3_README.md](PHASES_1_2_3_README.md) - Quick reference for completed work
-- **Detailed Report**: [PHASE_1_2_3_COMPLETION_SUMMARY.md](PHASE_1_2_3_COMPLETION_SUMMARY.md) - Full completion details
-- **Project Plan**: [PROJECT_COMPLETION_PLAN.md](PROJECT_COMPLETION_PLAN.md) - 6-8 week roadmap
 - **Getting Started**: [QUICK_START.md](QUICK_START.md) - How to run the system
+- **Developer Reference**: [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Error handling & best practices
+- **API Reference**: [docs/api_reference.md](docs/api_reference.md) - Full endpoint listing
+- **Architecture**: [docs/overview.md](docs/overview.md) - System design
 
-### What's New (Phase 1-3)
-- ✅ Prometheus metrics integration (15+ metrics)
-- ✅ Grafana dashboards (system health & processing metrics)
+### Implemented Features
+- ✅ Multi-source CSV processing (6 sources: BoA, Chase, Restaurant Depot, Sysco, GG, AR)
+- ✅ PDF merchant statement extraction (pdfplumber, PyMuPDF, tabula-py)
+- ✅ Intelligent column mapping with JSON config per source
+- ✅ Multi-level validation (structural, format, data quality, metadata-driven)
+- ✅ Year/month-based output organization
+- ✅ Prometheus metrics (15+ counters/histograms/gauges)
+- ✅ Grafana dashboard configs
 - ✅ Enhanced JSON logging with correlation IDs
-- ✅ Comprehensive health checks (6 endpoints)
+- ✅ 6 health check endpoints (liveness, readiness, Prometheus scrape)
+- ✅ Rate limiting (slowapi)
+- ✅ Custom exception hierarchy with HTTP error factories
+- ✅ File locking and MIME-type validation
 - ✅ Load testing framework (Locust)
-- ✅ Automated security audits (Bandit, Safety, Semgrep)
-- ✅ 30+ integration tests
-- ✅ Route-level error handling with custom exceptions
+- ✅ Security scanning (Bandit, Safety, Semgrep)
+- ✅ Integration test suite
 
 ## Features
 
-- **Multi-Source Data Processing**: Support for various financial institutions (Chase, Bank of America, etc.)
-- **Intelligent Column Mapping**: Automatic detection and mapping of financial data columns
-- **Advanced Validation**: Multi-level validation including structural, format, and data quality checks
-- **Metadata-Based Processing**: Enhanced validation using saved metadata from previous uploads
-- **Real-time Processing**: WebSocket support for real-time status updates
-- **Modern Web Interface**: Clean, responsive UI built with FastAPI and Jinja2
-- **PDF Merchant Statement Processing**: Extract and convert merchant statement PDFs to CSV format
+- **Multi-Source Data Processing**: Chase, Bank of America, Restaurant Depot, Sysco, GG, AR
+- **Intelligent Column Mapping**: JSON-configured per-source mapping with automatic column detection
+- **Advanced Validation**: Multi-level validation — structural, format, data quality, and metadata-driven
+- **Metadata-Based Processing**: Validation cross-referenced against saved sample metadata
+- **Real-time Processing**: WebSocket support for live status updates
+- **Modern Web Interface**: Server-side Jinja2 templates + vanilla JS (Bootstrap 5, Chart.js)
+- **PDF Merchant Statement Processing**: Extract and convert merchant PDFs to CSV (pdfplumber, PyMuPDF, tabula-py)
 - **Multi-Level Table Sorting**: Advanced sorting with primary, secondary, and tertiary levels
+- **Observability**: Prometheus metrics, Grafana dashboards, structured JSON logging
 
 ## PDF Extraction & Processing
 
@@ -67,12 +73,16 @@ See `scripts/README.md` for detailed documentation.
 
 ## Technology Stack
 
-- **Backend**: FastAPI, Python 3.10+
-- **Frontend**: Jinja2 templates, JavaScript
-- **Data Processing**: Pandas, Pydantic
-- **Database**: SQLite (via SQLAlchemy)
-- **Validation**: Custom validation service with metadata support
-- **PDF Processing**: PyMuPDF for text extraction and table parsing
+- **Backend**: FastAPI, Python 3.10+, uvicorn
+- **Frontend**: Jinja2 templates, JavaScript (Bootstrap 5, Chart.js)
+- **Data Processing**: Pandas, Pydantic v2
+- **PDF Processing**: pdfplumber, PyMuPDF, tabula-py
+- **Validation**: python-magic (MIME type), chardet (encoding detection)
+- **Observability**: prometheus-client, structured JSON logging
+- **Rate Limiting**: slowapi
+- **Load Testing**: Locust
+- **Security Scanning**: Bandit, Safety, Semgrep
+- **Storage**: File system (no active database); SQLite/SQLAlchemy available
 
 ## Installation
 
@@ -126,9 +136,9 @@ See `scripts/README.md` for detailed documentation.
    ```
 
 The application will be available at:
-- **Frontend**: `http://localhost:3000`
-- **Backend API**: `http://localhost:8000`
-- **API Docs**: `http://localhost:8000/docs`
+- **Web UI**: `http://localhost:8000`
+- **Backend API**: `http://localhost:8000/api`
+- **API Docs** (debug mode only): `http://localhost:8000/api/docs`
 
 ## Project Structure
 
@@ -175,11 +185,18 @@ rest_finance/
 
 ## API Endpoints
 
-- `GET /` - Main application interface
-- `GET /api/sources` - List available data sources
-- `POST /api/files/upload/{source_id}` - Upload files for processing
-- `GET /api/files/validate/{source_id}` - Validate uploaded files
-- `GET /api/sample-data/sources/{source_id}/metadata` - Get source metadata
+See **[docs/api_reference.md](docs/api_reference.md)** for the full endpoint listing. Key groups:
+
+| Prefix | Description |
+|---|---|
+| `GET /` | Web UI pages (served by Jinja2 templates) |
+| `GET /api` | API info |
+| `/api/health` | Liveness, readiness, Prometheus scrape endpoints |
+| `/api/files` | Upload, list, preview, validate, download, backup |
+| `/api/processing` | Trigger processing, check status, browse outputs |
+| `/api/mappings` | CRUD for source mapping configurations |
+| `/api/files/analytics` | Group-by, monthly summaries, trends |
+| `/api/sample-data` | Sample metadata management |
 
 ## Development
 
@@ -209,16 +226,10 @@ The application uses environment variables for configuration. Key settings inclu
 
 ## Project Status & Planning
 
-**Current Status**: 85% Complete - Entering Final Phase  
-**Next Milestone**: Phase 1 Security Completion (Mid-December 2025)  
-**Production Target**: Early February 2026
-
 ### Quick Links
 - 📊 **[PROJECT_STATUS.md](PROJECT_STATUS.md)** - Current status & how to use this repo
-- 📋 **[PROJECT_COMPLETION_PLAN.md](PROJECT_COMPLETION_PLAN.md)** - Complete roadmap to production
 - 🚀 **[QUICK_START.md](QUICK_START.md)** - How to run the system
 - 📖 **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Error handling & best practices
-- 🔍 **[CODE_REVIEW.md](CODE_REVIEW.md)** - Comprehensive code review findings
 - 📝 **[CHANGELOG.md](CHANGELOG.md)** - Version history and changes
 
 ### Documentation

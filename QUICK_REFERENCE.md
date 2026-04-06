@@ -28,7 +28,7 @@ async def get_data(source: str):
 
 **Use Error Factories:**
 ```python
-from app.exceptions import bad_request_error, not_found_error, internal_error
+from app.exceptions import bad_request_error, not_found_error, conflict_error, unprocessable_entity_error, internal_error
 
 # Bad request (400)
 raise bad_request_error(
@@ -42,6 +42,18 @@ raise not_found_error(
     {"filename": filename, "source": source}
 )
 
+# Conflict (409) — e.g. concurrent upload
+raise conflict_error(
+    f"Upload already in progress for: {filename}",
+    {"filename": filename}
+)
+
+# Unprocessable entity (422) — bad data
+raise unprocessable_entity_error(
+    "CSV parsing failed",
+    {"error": str(e)}
+)
+
 # Internal error (500)
 raise internal_error(
     "Processing failed",
@@ -51,11 +63,21 @@ raise internal_error(
 
 **Or Raise Specific Exceptions:**
 ```python
-from app.exceptions import InvalidSourceError, AppFileNotFoundError
+from app.exceptions import InvalidSourceError, FileNotFoundError
 
 # These are automatically converted by @handle_service_errors
 raise InvalidSourceError(f"Invalid source: {source}")
-raise AppFileNotFoundError(f"File not found: {filename}")
+raise FileNotFoundError(f"File not found: {filename}")
+```
+
+**For synchronous functions, use `@handle_sync_service_errors`:**
+```python
+from app.exceptions import handle_sync_service_errors
+
+@handle_sync_service_errors
+def my_sync_handler():
+    # Same automatic exception conversion as async version
+    ...
 ```
 
 ## For Service Methods
@@ -66,8 +88,9 @@ raise AppFileNotFoundError(f"File not found: {filename}")
 from app.exceptions import (
     FileOperationError,
     FileAlreadyExistsError,
+    FileNotFoundError,
     InvalidFileTypeError,
-    AppFileNotFoundError
+    FileTooLargeError
 )
 
 async def save_file(source: str, file: UploadFile, filename: str):
@@ -140,10 +163,11 @@ if file_size > max_bytes:
 **File Operations:**
 ```python
 from app.constants import (
-    MAX_FILE_SIZE_MB,           # 100
-    SUPPORTED_FILE_EXTENSIONS,  # ['.csv', '.txt']
-    ALLOWED_MIME_TYPES,         # ['text/csv', 'text/plain', ...]
-    LOCK_FILE_PREFIX,           # '.uploading_'
+    MAX_FILE_SIZE_MB,           # 10
+    SUPPORTED_FILE_EXTENSIONS,  # ['.csv', '.pdf']
+    ALLOWED_CSV_MIME_TYPES,     # ['text/csv', 'text/plain', 'application/csv']
+    ALLOWED_PDF_MIME_TYPES,     # ['application/pdf']
+    LOCK_FILE_PREFIX,           # '.'
     LOCK_FILE_SUFFIX            # '.lock'
 )
 ```
@@ -304,36 +328,50 @@ processing_logger.log_system_event("Validation failed", level="error")
 FinanceProcessorError (base)
 │
 ├── FileOperationError
-│   ├── FileAlreadyExistsError        # File/lock already exists
-│   ├── InvalidFileTypeError          # MIME validation failed
-│   └── AppFileNotFoundError          # File not found
+│   ├── FileAlreadyExistsError       # Concurrent upload / lock exists
+│   └── FileNotFoundError            # File not found on disk
+│
+├── FileValidationError
+│   ├── FileTooLargeError            # Exceeds MAX_FILE_SIZE_MB (10 MB)
+│   └── InvalidFileTypeError         # MIME type or extension rejected
 │
 ├── ProcessingError
 │   ├── CSVParsingError              # Failed to parse CSV
-│   └── DataValidationError          # Validation failed
+│   └── DataValidationError          # Data quality check failed
 │
 ├── MappingError
-│   ├── InvalidSourceError           # Unknown source
-│   └── MappingNotFoundError         # Mapping not found
+│   ├── InvalidMappingError          # Mapping configuration is invalid
+│   └── MappingNotFoundError         # Mapping config not found
 │
-└── ConfigurationError
-    ├── InvalidConfigError           # Config validation failed
-    └── MissingConfigError           # Required config missing
+├── SourceError
+│   ├── InvalidSourceError           # Unknown source identifier
+│   └── SourceNotFoundError          # Source data not found
+│
+├── ConfigurationError               # Application config error
+│
+└── MetadataError                    # Metadata read/write failure
 ```
 
 ## HTTP Status Code Mapping
 
 | Exception Type | HTTP Status | When to Use |
-|---------------|-------------|-------------|
+|---|---|---|
 | `InvalidSourceError` | 400 Bad Request | Unknown source name |
-| `InvalidFileTypeError` | 400 Bad Request | Wrong file type |
-| `DataValidationError` | 400 Bad Request | Validation failed |
-| `AppFileNotFoundError` | 404 Not Found | File doesn't exist |
-| `MappingNotFoundError` | 404 Not Found | Mapping doesn't exist |
-| `FileAlreadyExistsError` | 409 Conflict | Concurrent upload |
-| `FileOperationError` | 500 Internal | I/O failure |
-| `ProcessingError` | 500 Internal | Processing failed |
-| `ConfigurationError` | 500 Internal | Config issue |
+| `InvalidFileTypeError` | 400 Bad Request | Wrong MIME type or extension |
+| `FileTooLargeError` | 400 Bad Request | Exceeds 10 MB limit |
+| `FileValidationError` | 400 Bad Request | Generic file validation failure |
+| `InvalidMappingError` | 400 Bad Request | Mapping config is malformed |
+| `FileNotFoundError` | 404 Not Found | File doesn't exist |
+| `MappingNotFoundError` | 404 Not Found | Mapping config not found |
+| `SourceNotFoundError` | 404 Not Found | Source data not found |
+| `FileAlreadyExistsError` | 409 Conflict | Concurrent upload in progress |
+| `ProcessingError` | 422 Unprocessable Entity | Processing / parsing failed |
+| `CSVParsingError` | 422 Unprocessable Entity | CSV is malformed |
+| `DataValidationError` | 422 Unprocessable Entity | Data quality check failed |
+| `FileOperationError` | 500 Internal | File I/O failure |
+| `ConfigurationError` | 500 Internal | App config issue |
+| `MetadataError` | 500 Internal | Metadata operation failed |
+| `FinanceProcessorError` | 500 Internal | Any other app error |
 
 ## Common Patterns
 
@@ -402,7 +440,7 @@ def test_invalid_source():
         get_source_config("invalid_source")
 
 def test_file_not_found():
-    with pytest.raises(AppFileNotFoundError):
+    with pytest.raises(FileNotFoundError):
         await file_service.delete_file("source", "nonexistent.csv")
 ```
 
@@ -444,4 +482,4 @@ When updating existing code:
 
 ---
 
-**Last Updated**: December 2024
+**Last Updated**: April 2026

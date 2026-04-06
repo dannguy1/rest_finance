@@ -1,30 +1,30 @@
 # Changelog - Security & Reliability Improvements
 
-## Phase 1: Critical Fixes (In Progress)
+## [1.0.0] - 2026-04-06
 
-### [Unreleased] - 2024-12-XX
+### Security & Reliability (Complete)
 
 #### Added
 
 **New Files:**
 - `app/constants.py` - Centralized configuration constants
-  - File size limits (MAX_FILE_SIZE_MB = 100)
-  - Supported file extensions (['.csv', '.txt'])
-  - MIME types (ALLOWED_MIME_TYPES)
-  - Date formats (DATE_FORMATS)
-  - Error message templates
-  - Lock file constants (LOCK_FILE_PREFIX, LOCK_FILE_SUFFIX)
-  - HTTP status codes
-  - Source names
+  - File size limit: `MAX_FILE_SIZE_MB = 10`
+  - Supported file extensions: `['.csv', '.pdf']`
+  - MIME types: `ALLOWED_CSV_MIME_TYPES`, `ALLOWED_PDF_MIME_TYPES`
+  - Date formats (`DATE_FORMATS`), encoding list, rate limit strings
+  - Error/success message templates
+  - Lock file constants (`LOCK_FILE_PREFIX = '.'`, `LOCK_FILE_SUFFIX = '.lock'`)
+  - HTTP status codes, source IDs and display names
 
 - `app/exceptions.py` - Custom exception hierarchy
   - Base exception: `FinanceProcessorError`
-  - File exceptions: `FileOperationError`, `FileAlreadyExistsError`, `InvalidFileTypeError`, `AppFileNotFoundError`
+  - File exceptions: `FileOperationError`, `FileAlreadyExistsError`, `FileNotFoundError`, `FileValidationError`, `FileTooLargeError`, `InvalidFileTypeError`
   - Processing exceptions: `ProcessingError`, `CSVParsingError`, `DataValidationError`
-  - Mapping exceptions: `MappingError`, `InvalidSourceError`, `MappingNotFoundError`
-  - Configuration exceptions: `ConfigurationError`, `InvalidConfigError`, `MissingConfigError`
-  - HTTP exception factories: `bad_request_error()`, `not_found_error()`, `internal_error()`
-  - Decorator: `@handle_service_errors` for automatic exception handling
+  - Mapping exceptions: `MappingError`, `InvalidMappingError`, `MappingNotFoundError`
+  - Source exceptions: `SourceError`, `InvalidSourceError`, `SourceNotFoundError`
+  - Other: `ConfigurationError`, `MetadataError`
+  - HTTP exception factories: `bad_request_error()`, `not_found_error()`, `conflict_error()`, `unprocessable_entity_error()`, `internal_error()`
+  - Decorators: `@handle_service_errors` (async), `@handle_sync_service_errors` (sync)
 
 - `CODE_REVIEW.md` - Comprehensive code review findings
 - `CODE_REVIEW_SUMMARY.md` - Executive summary and implementation guide
