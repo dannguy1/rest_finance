@@ -27,10 +27,12 @@ SOURCE_CONFIGS = {
         "name": "BankOfAmerica",
         "icon": "bank",
         "description": "Bank statement processing and management",
-        # Merchant activity pattern: BofA prefixes merchant card deposits/charges with this string
+        # Merchant activity pattern: BofA prefixes merchant card deposits/charges with this string.
+        # The actual description format is: "BANKCARD 8076    DES:BTOT DEP   ID:..."
+        # (variable whitespace between 8076 and DES:), so we match on the common prefix only.
         "merchant_pattern": {
             "type": "prefix",          # match start of Description
-            "value": "BANKCARD 8076 DES",
+            "value": "BANKCARD 8076",
             "label": "Merchant Deposits & Charges (BANKCARD 8076)"
         }
     },
