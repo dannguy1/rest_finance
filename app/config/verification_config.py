@@ -22,7 +22,9 @@ BANK_MATCHING_RULES: Dict[str, Dict[str, Any]] = {
         # How to identify merchant card deposits inside the bank statement
         "bank_filter_pattern": "BANKCARD 8076",
         "bank_filter_type": "contains",      # contains | prefix | regex
-        "bank_deposit_subtype": "BTOT DEP",  # only credits, not MTOT DISC fees
+        # Match both regular batch deposits (BTOT DEP) and adjustment deposits
+        # (BTOT ADJ) — both are real credits that correspond to merchant batches.
+        "bank_deposit_subtype": "BTOT",
         "bank_date_format": "%m/%d/%Y",
         "merchant_date_format": "%Y-%m-%d",
         # BofA does not encode the original sale date; derive from deposit_date − lag.
@@ -34,7 +36,7 @@ BANK_MATCHING_RULES: Dict[str, Dict[str, Any]] = {
     "chase": {
         "bank_filter_pattern": "BANKCARD 8076",
         "bank_filter_type": "contains",
-        "bank_deposit_subtype": "BTOT DEP",
+        "bank_deposit_subtype": "BTOT",
         "bank_date_format": "%m/%d/%Y",
         "merchant_date_format": "%Y-%m-%d",
         # Chase embeds the original sale date as "DESC DATE:YYMMDD" — use it directly.

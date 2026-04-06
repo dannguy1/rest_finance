@@ -136,6 +136,10 @@ class VerificationResult:
     day_summaries: List[DaySummary] = field(default_factory=list)
     unmatched_batches: List[MerchantBatch] = field(default_factory=list)
     unmatched_deposits: List[BankDeposit] = field(default_factory=list)
+    # Deposits whose sale_date is in an adjacent month; they are already
+    # accounted for in that month's verification and are excluded from
+    # unmatched_bank_count.  Provided for transparency / debugging.
+    spillover_deposits: List[BankDeposit] = field(default_factory=list)
     matched_pairs: List[Dict[str, Any]] = field(default_factory=list)
 
 
@@ -168,7 +172,35 @@ class VerificationService:
         adjustments = [b for b in batches if b.is_adjustment]
         real_batches = [b for b in batches if not b.is_adjustment]
         unmatched_batches = [b for b in real_batches if not b.matched]
-        unmatched_deposits = [d for d in deposits if not d.matched]
+
+        # For banks that embed sale_date in the description (Chase), only count
+        # deposits as "unmatched" when their sale_date falls inside the current
+        # month.  Cross-month boundary deposits whose batches were already matched
+        # in an adjacent month's verification are tracked separately so they don't
+        # inflate the unmatched count.
+        month_start = date(year, month, 1)
+        month_end = (
+            date(year + 1, 1, 1) - timedelta(days=1)
+            if month == 12
+            else date(year, month + 1, 1) - timedelta(days=1)
+        )
+        has_embedded_sale_date = bool(cfg.get("bank_sale_date_regex"))
+
+        all_unmatched_deposits = [d for d in deposits if not d.matched]
+        if has_embedded_sale_date:
+            # Only deposits whose sale_date is in the current month are real
+            # discrepancies; those outside the window belong to another month.
+            unmatched_deposits = [
+                d for d in all_unmatched_deposits
+                if d.sale_date is not None and month_start <= d.sale_date <= month_end
+            ]
+            spillover_deposits = [
+                d for d in all_unmatched_deposits
+                if d not in unmatched_deposits
+            ]
+        else:
+            unmatched_deposits = all_unmatched_deposits
+            spillover_deposits = []
 
         total_merchant = round(sum(b.amount for b in real_batches), 2)
         total_bank = round(sum(d.amount for d in deposits), 2)
@@ -201,6 +233,7 @@ class VerificationService:
             day_summaries=day_summaries,
             unmatched_batches=unmatched_batches,
             unmatched_deposits=unmatched_deposits,
+            spillover_deposits=spillover_deposits,
             matched_pairs=matched_pairs,
         )
 
