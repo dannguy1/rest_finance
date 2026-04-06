@@ -94,21 +94,9 @@ class FileService:
                 file_path.unlink(missing_ok=True)
                 raise InvalidFileTypeError(str(e), {"filename": safe_filename, "source": source})
             
-            # If it's a PDF file, convert it to CSV
-            if safe_filename.lower().endswith('.pdf'):
-                from app.services.pdf_service import pdf_service
-                
-                csv_path = pdf_service.process_merchant_statement(file_path, source)
-                if csv_path:
-                    processing_logger.log_system_event(
-                        f"Successfully converted PDF to CSV: {safe_filename} -> {csv_path.name}", 
-                        level="info"
-                    )
-                else:
-                    processing_logger.log_system_event(
-                        f"Failed to convert PDF to CSV: {safe_filename}", 
-                        level="warning"
-                    )
+            # NOTE: PDF files are NOT automatically processed
+            # User must explicitly click "Process" button to extract data
+            # This ensures user has control over when extraction happens
             
             processing_logger.log_file_operation("upload", safe_filename, source, True)
             return True
@@ -147,53 +135,103 @@ class FileService:
                     )
     
     async def get_source_files(self, source: str) -> List[dict]:
-        """Get list of files for a source with file information."""
+        """
+        Get list of files for a source with enhanced metadata.
+        Detects parent-child relationships for extracted files.
+        """
         source_dir = self.data_dir / source / "input"
         if not source_dir.exists():
             return []
         
         files = []
-        # Handle both CSV and PDF files
+        extracted_files = set()  # Track extracted files
+        
+        # First pass: collect all files
+        all_files = {}
         for file_path in source_dir.iterdir():
             if file_path.is_file() and file_path.suffix.lower() in ['.csv', '.pdf']:
                 stat = file_path.stat()
-                files.append({
+                all_files[file_path.name] = {
                     "name": file_path.name,
                     "size": stat.st_size,
                     "modified": stat.st_mtime,
-                    "type": file_path.suffix.lower()
-                })
+                    "type": file_path.suffix.lower(),
+                    "path": str(file_path.relative_to(self.data_dir))
+                }
         
-        return files
+        # Second pass: detect extracted files (CSV files with parent PDF)
+        for filename, file_info in all_files.items():
+            if filename.endswith('.csv'):
+                # Check if there's a corresponding PDF
+                # Pattern: Jan2025.pdf -> Jan2025_batches.csv
+                base_name = filename.rsplit('_', 1)[0] if '_' in filename else filename.replace('.csv', '')
+                possible_pdf = f"{base_name}.pdf"
+                
+                if possible_pdf in all_files:
+                    # This CSV was likely extracted from the PDF
+                    file_info['is_extracted'] = True
+                    file_info['parent_file'] = possible_pdf
+                    file_info['status'] = 'extracted'
+                    extracted_files.add(filename)
+                else:
+                    file_info['is_extracted'] = False
+                    file_info['status'] = 'pending'
+            else:
+                # PDF files
+                file_info['is_extracted'] = False
+                file_info['status'] = 'pending'
+        
+        # Sort: PDF files first, then their extracted CSVs, then other CSVs
+        sorted_files = []
+        for filename, file_info in sorted(all_files.items(), key=lambda x: (x[1]['modified'], x[0])):
+            if file_info['type'] == '.pdf':
+                sorted_files.append(file_info)
+                # Add extracted CSV right after its parent PDF
+                for csv_name, csv_info in all_files.items():
+                    if csv_info.get('parent_file') == filename:
+                        sorted_files.append(csv_info)
+            elif filename not in extracted_files:
+                # Add non-extracted CSV files
+                sorted_files.append(file_info)
+        
+        return sorted_files
     
-    async def delete_file(self, source: str, filename: str) -> bool:
+    async def delete_file(self, source: str, filename: str) -> dict:
         """
-        Delete a file from source directory.
-        
+        Delete a source input file and remove its entries from all processed output files.
+
         Args:
             source: Source identifier
             filename: Filename to delete
-            
+
         Returns:
-            True if successful
-            
+            Dict with deletion result and cleanup summary:
+                {
+                    "success": True,
+                    "output_files_modified": int,
+                    "output_files_deleted": int,
+                    "rows_removed": int,
+                }
+
         Raises:
             AppFileNotFoundError: If file doesn't exist
             FileOperationError: If deletion fails
         """
         try:
             file_path = self.data_dir / source / "input" / filename
-            
+
             if not file_path.exists():
                 raise AppFileNotFoundError(
                     f"File not found: {filename}",
                     {"filename": filename, "source": source}
                 )
-            
+
             file_path.unlink()
             processing_logger.log_file_operation("delete", filename, source, True)
-            return True
-            
+
+            cleanup = await self._remove_entries_from_outputs(source, filename)
+            return {"success": True, **cleanup}
+
         except AppFileNotFoundError:
             raise
         except (IOError, PermissionError) as e:
@@ -209,6 +247,97 @@ class FileService:
                 details={"filename": filename, "source": source}
             )
             raise
+
+    async def _remove_entries_from_outputs(self, source: str, filename: str) -> dict:
+        """
+        Remove all rows attributed to `filename` from processed output CSVs.
+
+        Scans every CSV under data/{source}/output/, strips rows where the
+        'Source File' column matches `filename`, then either rewrites the file
+        (rows remaining) or deletes it (no rows remaining).  Empty year
+        directories are also removed.
+
+        Args:
+            source: Source identifier (e.g. "BankOfAmerica")
+            filename: The deleted input filename to scrub from outputs
+
+        Returns:
+            {
+                "output_files_modified": int,
+                "output_files_deleted": int,
+                "rows_removed": int,
+            }
+        """
+        output_dir = self.data_dir / source / "output"
+        files_modified = 0
+        files_deleted = 0
+        rows_removed = 0
+
+        if not output_dir.exists():
+            return {
+                "output_files_modified": 0,
+                "output_files_deleted": 0,
+                "rows_removed": 0,
+            }
+
+        for csv_path in sorted(output_dir.rglob("*.csv")):
+            try:
+                df = pd.read_csv(csv_path)
+            except Exception as e:
+                processing_logger.log_system_event(
+                    f"Could not read output file during cleanup: {csv_path}",
+                    level="warning",
+                    details={"error": str(e)}
+                )
+                continue
+
+            if "Source File" not in df.columns:
+                continue
+
+            before = len(df)
+            df = df[df["Source File"] != filename]
+            removed = before - len(df)
+
+            if removed == 0:
+                continue
+
+            rows_removed += removed
+
+            if df.empty:
+                csv_path.unlink()
+                files_deleted += 1
+                processing_logger.log_file_operation(
+                    "delete", csv_path.name, source, True
+                )
+                # Remove empty year directory
+                try:
+                    csv_path.parent.rmdir()
+                except OSError:
+                    pass  # Directory not empty — leave it
+            else:
+                df.to_csv(csv_path, index=False)
+                files_modified += 1
+                processing_logger.log_file_operation(
+                    "update", csv_path.name, source, True
+                )
+
+        if rows_removed:
+            processing_logger.log_system_event(
+                f"Cleaned up processed outputs after deleting '{filename}'",
+                level="info",
+                details={
+                    "source": source,
+                    "rows_removed": rows_removed,
+                    "files_modified": files_modified,
+                    "files_deleted": files_deleted,
+                },
+            )
+
+        return {
+            "output_files_modified": files_modified,
+            "output_files_deleted": files_deleted,
+            "rows_removed": rows_removed,
+        }
     
     async def get_output_files(self, source: str, year: Optional[int] = None) -> List[str]:
         """Get list of output files for a source."""

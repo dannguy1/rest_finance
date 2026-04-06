@@ -86,22 +86,59 @@ async def list_files(source: str, request: Request):
         "count": len(files)
     }
 
+@router.get("/view-pdf/{source}")
+@limiter.limit(settings.rate_limit_api)
+async def view_pdf(source: str, request: Request, file: str):
+    """Serve a PDF file for preview in browser."""
+    try:
+        source_config = get_source_config(source)
+        source_enum = source_config["name"]
+        
+        from pathlib import Path
+        
+        # Check input directory for PDF files
+        file_path = settings.data_path / source_enum / "input" / file
+        if not file_path.exists() or file_path.suffix.lower() != '.pdf':
+            raise HTTPException(
+                status_code=404,
+                detail=f"PDF file '{file}' not found for {source_config['display_name']}"
+            )
+        
+        return FileResponse(
+            path=str(file_path),
+            filename=file_path.name,
+            media_type='application/pdf',
+            headers={"Content-Disposition": "inline"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        processing_logger.log_system_event(
+            f"Error serving PDF {file} for {source}: {str(e)}", level="error"
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.delete("/{source}/{filename}")
 @limiter.limit(settings.rate_limit_api)
 @handle_service_errors
 async def delete_file(source: str, filename: str, request: Request):
-    """Delete a file from a source with enhanced error handling."""
+    """Delete a source file and remove its entries from all processed output files."""
     source_config = get_source_config(source)
     source_enum = source_config["name"]
-    
-    # Service will raise AppFileNotFoundError if file doesn't exist
-    success = await file_service.delete_file(source_enum, filename)
-    
+
+    result = await file_service.delete_file(source_enum, filename)
+
     return {
         "message": "File deleted successfully",
         "filename": filename,
         "source": source_enum,
-        "source_display": source_config["display_name"]
+        "source_display": source_config["display_name"],
+        "cleanup": {
+            "rows_removed": result["rows_removed"],
+            "output_files_modified": result["output_files_modified"],
+            "output_files_deleted": result["output_files_deleted"],
+        },
     }
 
 @router.get("/validate/{source}/{filename}")
