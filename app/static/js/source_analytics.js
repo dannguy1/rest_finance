@@ -595,7 +595,7 @@ class SourceAnalyticsApp {
 
         // Show modal
         const modalEl = document.getElementById('descriptionDetailModal');
-        const modal   = bootstrap.Modal.getOrCreate(modalEl);
+        const modal   = bootstrap.Modal.getOrCreateInstance(modalEl);
         modal.show();
 
         try {
