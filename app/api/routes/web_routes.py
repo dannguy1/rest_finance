@@ -139,6 +139,16 @@ async def mapping_page(request: Request):
         "page_description": "Configure how source-specific columns map to normalized processed data"
     })
 
+
+@router.get("/verification", response_class=HTMLResponse)
+async def verification_page(request: Request):
+    """Deposit verification page"""
+    return templates.TemplateResponse("verification.html", {
+        "request": request,
+        "page_title": "Deposit Verification",
+        "page_description": "Verify merchant batch deposits against bank statement records"
+    })
+
 # API endpoints for dynamic content
 @router.get("/api/pages/{page}")
 async def get_page_content(page: str):

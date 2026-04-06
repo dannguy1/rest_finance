@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Deposit Verification{% endblock %}
+
+{% block extra_css %}
+<style>
+    .verif-card { border-radius: 0.5rem; }
+
+    .stat-card {
+        border-left: 4px solid;
+        border-radius: 0.375rem;
+    }
+    .stat-card.matched  { border-color: #198754; }
+    .stat-card.merchant { border-color: #0d6efd; }
+    .stat-card.bank     { border-color: #6f42c1; }
+    .stat-card.variance { border-color: #fd7e14; }
+
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.25rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .status-matched    { background:#d1e7dd; color:#0a3622; }
+    .status-partial    { background:#fff3cd; color:#664d03; }
+    .status-missing    { background:#f8d7da; color:#58151c; }
+    .status-adjustment { background:#e2e3e5; color:#41464b; }
+
+    .day-row { cursor: pointer; }
+    .day-row:hover { background: #f8f9fa; }
+
+    #verif-table th { white-space: nowrap; font-size:0.82rem; }
+    #verif-table td { font-size:0.85rem; vertical-align: middle; }
+
+    .progress-bar-matched { background:#198754; }
+
+    .unmatched-section { max-height: 280px; overflow-y: auto; }
+
+    .pair-row td { font-size: 0.82rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center mb-4">
+    <i class="bi bi-shield-check fs-2 text-success me-3"></i>
+    <div>
+      <h2 class="mb-0">Deposit Verification</h2>
+      <p class="text-muted mb-0 small">
+        Verify that every merchant batch has a matching bank deposit within the settlement window.
+      </p>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="card verif-card shadow-sm mb-4">
+    <div class="card-body">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label fw-semibold">Location</label>
+          <select id="location-select" class="form-select">
+            <option value="">Loading…</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-semibold">Year</label>
+          <select id="year-select" class="form-select" disabled>
+            <option value="">—</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-semibold">Month</label>
+          <select id="month-select" class="form-select" disabled>
+            <option value="">—</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button id="run-btn" class="btn btn-success w-100" disabled>
+            <i class="bi bi-play-fill me-1"></i> Run Verification
+          </button>
+        </div>
+        <div class="col-md-3">
+          <div id="source-info" class="text-muted small"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results (hidden until run) -->
+  <div id="results-section" class="d-none">
+
+    <!-- Summary cards -->
+    <div class="row g-3 mb-4" id="summary-cards"></div>
+
+    <!-- Progress bar -->
+    <div class="card verif-card shadow-sm mb-4">
+      <div class="card-body py-2">
+        <div class="d-flex justify-content-between small text-muted mb-1">
+          <span>Match rate</span>
+          <span id="match-rate-label">0%</span>
+        </div>
+        <div class="progress" style="height:12px;">
+          <div id="match-progress" class="progress-bar progress-bar-matched" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Day-by-day table -->
+    <div class="card verif-card shadow-sm mb-4">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">
+          <i class="bi bi-calendar3 me-2"></i>Day-by-Day Summary
+        </span>
+        <button id="export-btn" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-download me-1"></i>Export CSV
+        </button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0" id="verif-table">
+          <thead class="table-dark">
+            <tr>
+              <th>Sale Date</th>
+              <th class="text-end">Batches</th>
+              <th class="text-end">Merchant Total</th>
+              <th>Deposit Date</th>
+              <th class="text-end">Bank Deposits</th>
+              <th class="text-end">Bank Total</th>
+              <th class="text-end">Lag (days)</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="day-tbody"></tbody>
+          <tfoot id="day-tfoot" class="table-secondary fw-bold"></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- Unmatched panels -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-6">
+        <div class="card verif-card shadow-sm h-100">
+          <div class="card-header bg-danger text-white">
+            <i class="bi bi-x-circle me-2"></i>
+            Unmatched Merchant Batches
+            <span id="unmatched-batch-count" class="badge bg-light text-danger ms-2">0</span>
+          </div>
+          <div class="card-body p-0 unmatched-section">
+            <table class="table table-sm mb-0">
+              <thead class="table-light"><tr>
+                <th>Sale Date</th><th>Ref</th><th class="text-end">Amount</th>
+              </tr></thead>
+              <tbody id="unmatched-batches-tbody">
+                <tr><td colspan="3" class="text-center text-muted py-3">None</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="card verif-card shadow-sm h-100">
+          <div class="card-header bg-warning text-dark">
+            <i class="bi bi-question-circle me-2"></i>
+            Unmatched Bank Deposits
+            <span id="unmatched-dep-count" class="badge bg-dark text-warning ms-2">0</span>
+          </div>
+          <div class="card-body p-0 unmatched-section">
+            <table class="table table-sm mb-0">
+              <thead class="table-light"><tr>
+                <th>Deposit Date</th><th class="text-end">Amount</th><th>Note</th>
+              </tr></thead>
+              <tbody id="unmatched-deposits-tbody">
+                <tr><td colspan="3" class="text-center text-muted py-3">None</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div id="empty-state" class="text-center py-5 text-muted">
+    <i class="bi bi-shield fs-1 d-block mb-3 opacity-25"></i>
+    <p>Select a location and month, then click <strong>Run Verification</strong>.</p>
+  </div>
+
+  <!-- Error state -->
+  <div id="error-state" class="d-none">
+    <div class="alert alert-danger">
+      <i class="bi bi-exclamation-triangle me-2"></i>
+      <span id="error-msg"></span>
+    </div>
+  </div>
+
+</div>
+
+<!-- Drill-down Modal -->
+<div class="modal fade" id="dayDetailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-search me-2"></i>
+          <span id="modal-title-text">Batch Detail</span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <h6 class="text-primary"><i class="bi bi-receipt me-1"></i>Merchant Batches</h6>
+            <table class="table table-sm table-bordered">
+              <thead class="table-primary"><tr>
+                <th>Sale Date</th><th>Ref</th><th class="text-end">Amount</th><th>Status</th>
+              </tr></thead>
+              <tbody id="modal-batches-tbody"></tbody>
+            </table>
+          </div>
+          <div class="col-md-6">
+            <h6 class="text-success"><i class="bi bi-bank me-1"></i>Bank Deposits</h6>
+            <table class="table table-sm table-bordered">
+              <thead class="table-success"><tr>
+                <th>Deposit Date</th><th class="text-end">Amount</th><th>Matched Ref</th>
+              </tr></thead>
+              <tbody id="modal-deposits-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <h6 class="text-muted"><i class="bi bi-arrow-left-right me-1"></i>Matched Pairs</h6>
+        <table class="table table-sm table-bordered">
+          <thead class="table-light"><tr>
+            <th>Sale Date</th><th>Merchant Ref</th><th class="text-end">Amount</th>
+            <th>Deposit Date</th><th class="text-end">Lag</th>
+          </tr></thead>
+          <tbody id="modal-pairs-tbody"></tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/verification.js?v={{ range(1,9999) | random }}"></script>
+{% endblock %}

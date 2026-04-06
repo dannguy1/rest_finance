@@ -16,6 +16,7 @@ import logging
 from app.config import settings
 from app.utils.logging import processing_logger
 from app.api.routes import file_routes, processing_routes, health_routes, web_routes, mapping_routes, analytics_routes
+from app.api.routes import verification_routes
 from app.api import sample_data
 from app.middleware.logging_middleware import LoggingMiddleware
 from app.middleware.error_middleware import ErrorHandlingMiddleware
@@ -76,6 +77,7 @@ app.include_router(file_routes.router, prefix="/api/files", tags=["Files"])
 app.include_router(processing_routes.router, prefix="/api/processing", tags=["Processing"])
 app.include_router(mapping_routes.router, prefix="/api/mappings", tags=["Mapping"])
 app.include_router(sample_data.router, prefix="/api/sample-data", tags=["Sample Data"])
+app.include_router(verification_routes.router, tags=["Verification"])
 app.include_router(web_routes.router, tags=["Web"])
 
 
