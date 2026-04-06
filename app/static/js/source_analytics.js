@@ -27,6 +27,8 @@ class SourceAnalyticsApp {
                     this.loadTrends();
                 } else if (e.target.id === 'merchant-analysis-tab') {
                     this.loadMerchantAnalysis();
+                } else if (e.target.id === 'payroll-analysis-tab') {
+                    this.loadPayrollAnalysis();
                 }
             });
         });
@@ -51,6 +53,13 @@ class SourceAnalyticsApp {
         if (exportMerchantBtn) {
             exportMerchantBtn.addEventListener('click', () => {
                 this.exportMerchantData();
+            });
+        }
+
+        const exportPayrollBtn = document.getElementById('export-payroll-data');
+        if (exportPayrollBtn) {
+            exportPayrollBtn.addEventListener('click', () => {
+                this.exportPayrollData();
             });
         }
     }
@@ -873,6 +882,132 @@ class SourceAnalyticsApp {
         const a    = document.createElement('a');
         a.href     = url;
         a.download = `${this.config.sourceName}_merchant_analysis.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // ── Payroll Analysis ─────────────────────────────────────────────────────
+
+    async loadPayrollAnalysis() {
+        if (!this.currentFile) {
+            this.showEmptyState('payroll');
+            return;
+        }
+        this.showLoading('payroll');
+
+        try {
+            const url = `/api/files/analytics/${this.config.source}/payroll-analysis`
+                + `?fileType=${this.currentFile.type}`
+                + `&filePath=${encodeURIComponent(this.currentFile.path)}`;
+
+            const response = await fetch(url);
+
+            if (response.status === 422) {
+                const err = await response.json();
+                this.hideLoading('payroll');
+                document.getElementById('payroll-empty').style.display = 'none';
+                document.getElementById('payroll-unavailable').style.display = 'block';
+                const msgEl = document.getElementById('payroll-unavailable-msg');
+                if (msgEl) msgEl.textContent = err.detail || 'Payroll Analysis is not configured for this source.';
+                return;
+            }
+
+            if (!response.ok) throw new Error(`Server error: ${response.status}`);
+            const data = await response.json();
+
+            this._payrollData = data;
+            this.displayPayrollAnalysis(data);
+        } catch (err) {
+            this.hideLoading('payroll');
+            this.showAlert('Failed to load payroll analysis: ' + err.message, 'danger');
+            this.showEmptyState('payroll');
+        }
+    }
+
+    displayPayrollAnalysis(data) {
+        this.hideLoading('payroll');
+        document.getElementById('payroll-empty').style.display = 'none';
+        document.getElementById('payroll-unavailable').style.display = 'none';
+        document.getElementById('payroll-results').style.display = 'block';
+
+        // Pattern badge
+        const patternLabel = data.pattern?.label || data.pattern?.value || 'Payroll Filter';
+        document.getElementById('payroll-pattern-label').textContent = patternLabel;
+
+        // Summary cards — payroll is almost always outflows (transfers out)
+        const s = data.summary;
+        const totalOut = Math.abs(s.total_charges);
+        document.getElementById('payroll-total-transfers').textContent = `$${totalOut.toFixed(2)}`;
+        document.getElementById('payroll-total-charges').textContent   = `$${totalOut.toFixed(2)}`;
+        document.getElementById('payroll-transfer-count').textContent  = `${s.charge_count} transfers`;
+        document.getElementById('payroll-charge-count').textContent    = `${s.charge_count} debits`;
+        document.getElementById('payroll-total-count').textContent     = s.total_count;
+
+        const netEl = document.getElementById('payroll-net');
+        netEl.textContent = `$${s.net.toFixed(2)}`;
+        netEl.className = `fs-4 fw-bold ${s.net >= 0 ? 'text-success' : 'text-danger'}`;
+
+        // Monthly breakdown table
+        const monthTbody = document.getElementById('payroll-monthly-tbody');
+        const monthTfoot = document.getElementById('payroll-monthly-tfoot');
+        if (data.monthly_breakdown.length === 0) {
+            monthTbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">No monthly data</td></tr>';
+        } else {
+            monthTbody.innerHTML = data.monthly_breakdown.map(m => {
+                const netClass = m.net >= 0 ? 'text-success' : 'text-danger';
+                return `<tr>
+                    <td class="fw-semibold">${this._escapeHtml(m.label)}</td>
+                    <td class="text-end text-success">$${m.income.toFixed(2)}</td>
+                    <td class="text-end text-danger">$${Math.abs(m.charges).toFixed(2)}</td>
+                    <td class="text-end ${netClass} fw-semibold">$${m.net.toFixed(2)}</td>
+                    <td class="text-center">${m.count}</td>
+                </tr>`;
+            }).join('');
+            monthTfoot.innerHTML = `<tr>
+                <td>Total</td>
+                <td class="text-end text-success">$${s.total_income.toFixed(2)}</td>
+                <td class="text-end text-danger">$${Math.abs(s.total_charges).toFixed(2)}</td>
+                <td class="text-end ${s.net >= 0 ? 'text-success' : 'text-danger'}">$${s.net.toFixed(2)}</td>
+                <td class="text-center">${s.total_count}</td>
+            </tr>`;
+        }
+
+        // Transaction table
+        const txnCount = data.transactions.length;
+        document.getElementById('payroll-txn-count-badge').textContent = txnCount;
+        const txnTbody = document.getElementById('payroll-txn-tbody');
+        if (txnCount === 0) {
+            txnTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No payroll transactions found</td></tr>';
+        } else {
+            txnTbody.innerHTML = data.transactions.map(t => {
+                const amtClass = t.amount >= 0 ? 'text-success' : 'text-danger';
+                const sign     = t.amount < 0 ? '-' : '';
+                const badge    = t.amount < 0
+                    ? '<span class="badge" style="background-color:#6610f2;">Transfer Out</span>'
+                    : '<span class="badge bg-success bg-opacity-75">Credit</span>';
+                return `<tr>
+                    <td class="text-nowrap">${this._escapeHtml(t.date || '—')}</td>
+                    <td>${this._escapeHtml(t.description)}</td>
+                    <td class="text-end ${amtClass}">${sign}$${Math.abs(t.amount).toFixed(2)}</td>
+                    <td class="text-center">${badge}</td>
+                </tr>`;
+            }).join('');
+        }
+    }
+
+    exportPayrollData() {
+        if (!this._payrollData) return;
+        const d = this._payrollData;
+        const rows = [['Date', 'Description', 'Amount', 'Type']];
+        d.transactions.forEach(t => rows.push([t.date, t.description, t.amount.toFixed(2), t.type]));
+        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `${this.config.sourceName}_payroll_analysis.csv`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
