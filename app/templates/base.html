@@ -78,129 +78,189 @@
         
         <div class="offcanvas-body">
             <nav class="sidebar-nav">
-                <ul class="nav flex-column">
-                    <!-- Dashboard -->
-                    <li class="nav-item">
-                        <a class="nav-link text-light mb-2" href="/" data-page="dashboard">
-                            <i class="bi bi-speedometer2 me-2"></i>
-                            Dashboard
-                        </a>
-                    </li>
-                    
-                    <li class="nav-item">
-                        <hr class="border-secondary my-3">
-                    </li>
-                    
-                    <!-- Bank Statements Section -->
-                    <li class="nav-item">
-                        <h6 class="text-light-50 text-uppercase small mb-2 px-3">
-                            <i class="bi bi-bank me-2"></i>
-                            Bank Statements
-                        </h6>
-                        
-                        <!-- Bank of America -->
-                        <div class="nav-item">
-                            <a class="nav-link text-light-50 mb-1 px-3" href="/source/bankofamerica" data-page="source-boa">
-                                <i class="bi bi-bank me-2"></i>
-                                Bank of America
-                            </a>
-                        </div>
-                        
-                        <!-- Chase -->
-                        <div class="nav-item">
-                            <a class="nav-link text-light-50 mb-1 px-3" href="/source/chase" data-page="source-chase">
-                                <i class="bi bi-credit-card me-2"></i>
-                                Chase
-                            </a>
-                        </div>
-                    </li>
-                    
-                    <li class="nav-item">
-                        <hr class="border-secondary my-3">
-                    </li>
-                    
-                    <!-- Supplier Receipts Section -->
-                    <li class="nav-item">
-                        <h6 class="text-light-50 text-uppercase small mb-2 px-3">
-                            <i class="bi bi-receipt me-2"></i>
-                            Supplier Receipts
-                        </h6>
-                        
-                        <!-- Sysco -->
-                        <div class="nav-item">
-                            <a class="nav-link text-light-50 mb-1 px-3" href="/source/sysco" data-page="source-sysco">
-                                <i class="bi bi-truck me-2"></i>
-                                Sysco
-                            </a>
-                        </div>
-                        
-                        <!-- Restaurant Depot -->
-                        <div class="nav-item">
-                            <a class="nav-link text-light-50 mb-1 px-3" href="/source/restaurantdepot" data-page="source-restaurantdepot">
-                                <i class="bi bi-shop me-2"></i>
-                                Restaurant Depot
-                            </a>
-                        </div>
-                    </li>
-                    
-                    <li class="nav-item">
-                        <hr class="border-secondary my-3">
-                    </li>
-                    
-                    <!-- Merchant Statements Section -->
-                    <li class="nav-item">
-                        <h6 class="text-light-50 text-uppercase small mb-2 px-3">
-                            <i class="bi bi-credit-card me-2"></i>
-                            Merchant Statements
-                        </h6>
-                        
-                        <!-- GG -->
-                        <div class="nav-item">
-                            <a class="nav-link text-light-50 mb-1 px-3" href="/source/gg" data-page="source-gg">
-                                <i class="bi bi-credit-card me-2"></i>
-                                GG
-                            </a>
-                        </div>
-                        
-                        <!-- AR -->
-                        <div class="nav-item">
-                            <a class="nav-link text-light-50 mb-1 px-3" href="/source/ar" data-page="source-ar">
-                                <i class="bi bi-credit-card me-2"></i>
-                                AR
-                            </a>
-                        </div>
-                    </li>
-                    
-                    <li class="nav-item">
-                        <hr class="border-secondary my-3">
-                    </li>
-                    
-                    <!-- System Section -->
-                    <li class="nav-item">
-                        <h6 class="text-light-50 text-uppercase small mb-2 px-3">
-                            <i class="bi bi-gear me-2"></i>
-                            System
-                        </h6>
-                        
-                        <a class="nav-link text-light-50 mb-1 px-3" href="/verification" data-page="verification">
-                            <i class="bi bi-shield-check me-2"></i>
-                            Deposit Verification
-                        </a>
+                <ul class="nav flex-column" id="sidebar-nav-list">
 
-                        <a class="nav-link text-light-50 mb-1 px-3" href="/settings" data-page="settings">
-                            <i class="bi bi-gear-wide-connected me-2"></i>
-                            Settings
-                        </a>
-                        
-                        <a class="nav-link text-light-50 mb-1 px-3" href="/mapping" data-page="mapping">
-                            <i class="bi bi-gear me-2"></i>
-                            Source Mapping
+                    <!-- Dashboard -->
+                    <li class="nav-item mb-1">
+                        <a class="nav-link sidebar-link text-light" href="/" data-path="/">
+                            <i class="bi bi-speedometer2 me-2"></i>Dashboard
                         </a>
                     </li>
+
+                    <li class="nav-item"><hr class="border-secondary my-2"></li>
+
+                    <!-- ── GG Location ─────────────────────────────────── -->
+                    <li class="nav-item">
+                        <button class="btn btn-sm w-100 text-start text-light d-flex align-items-center px-2 py-2 location-toggle"
+                                data-bs-toggle="collapse" data-bs-target="#loc-gg"
+                                aria-expanded="false" aria-controls="loc-gg"
+                                data-location="gg">
+                            <span class="location-dot me-2" style="width:10px;height:10px;border-radius:50%;background:#0d6efd;display:inline-block;flex-shrink:0"></span>
+                            <span class="fw-semibold flex-grow-1">GG · Garlic &amp; Chives 2</span>
+                            <i class="bi bi-chevron-down loc-chevron small"></i>
+                        </button>
+                        <div class="collapse" id="loc-gg">
+                            <ul class="nav flex-column ps-3 mt-1 mb-1">
+                                <li class="nav-item">
+                                    <a class="nav-link sidebar-link text-light-50 py-1"
+                                       href="/location/gg/bank"
+                                       data-path="/location/gg/bank" data-location="gg">
+                                        <i class="bi bi-bank me-2"></i>Bank Statement
+                                        <small class="ms-1 text-muted">(BofA)</small>
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link sidebar-link text-light-50 py-1"
+                                       href="/location/gg/merchant"
+                                       data-path="/location/gg/merchant" data-location="gg">
+                                        <i class="bi bi-credit-card me-2"></i>Merchant Statement
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link sidebar-link text-light-50 py-1"
+                                       href="/location/gg/verify"
+                                       data-path="/location/gg/verify" data-location="gg">
+                                        <i class="bi bi-shield-check me-2"></i>Deposit Verification
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+
+                    <!-- ── AR Location ─────────────────────────────────── -->
+                    <li class="nav-item mt-1">
+                        <button class="btn btn-sm w-100 text-start text-light d-flex align-items-center px-2 py-2 location-toggle"
+                                data-bs-toggle="collapse" data-bs-target="#loc-ar"
+                                aria-expanded="false" aria-controls="loc-ar"
+                                data-location="ar">
+                            <span class="location-dot me-2" style="width:10px;height:10px;border-radius:50%;background:#198754;display:inline-block;flex-shrink:0"></span>
+                            <span class="fw-semibold flex-grow-1">AR · Garlic &amp; Chives</span>
+                            <i class="bi bi-chevron-down loc-chevron small"></i>
+                        </button>
+                        <div class="collapse" id="loc-ar">
+                            <ul class="nav flex-column ps-3 mt-1 mb-1">
+                                <li class="nav-item">
+                                    <a class="nav-link sidebar-link text-light-50 py-1"
+                                       href="/location/ar/bank"
+                                       data-path="/location/ar/bank" data-location="ar">
+                                        <i class="bi bi-bank me-2"></i>Bank Statement
+                                        <small class="ms-1 text-muted">(Chase)</small>
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link sidebar-link text-light-50 py-1"
+                                       href="/location/ar/merchant"
+                                       data-path="/location/ar/merchant" data-location="ar">
+                                        <i class="bi bi-credit-card me-2"></i>Merchant Statement
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link sidebar-link text-light-50 py-1"
+                                       href="/location/ar/verify"
+                                       data-path="/location/ar/verify" data-location="ar">
+                                        <i class="bi bi-shield-check me-2"></i>Deposit Verification
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </li>
+
+                    <li class="nav-item"><hr class="border-secondary my-2"></li>
+
+                    <!-- ── Shared Vendors ──────────────────────────────── -->
+                    <li class="nav-item">
+                        <h6 class="text-light-50 text-uppercase small mb-1 px-2">
+                            <i class="bi bi-truck me-1"></i>Vendors
+                        </h6>
+                        <a class="nav-link sidebar-link text-light-50 py-1 px-3"
+                           href="/source/sysco" data-path="/source/sysco">
+                            <i class="bi bi-truck me-2"></i>Sysco
+                        </a>
+                        <a class="nav-link sidebar-link text-light-50 py-1 px-3"
+                           href="/source/restaurantdepot" data-path="/source/restaurantdepot">
+                            <i class="bi bi-shop me-2"></i>Restaurant Depot
+                        </a>
+                    </li>
+
+                    <li class="nav-item"><hr class="border-secondary my-2"></li>
+
+                    <!-- ── System ──────────────────────────────────────── -->
+                    <li class="nav-item">
+                        <h6 class="text-light-50 text-uppercase small mb-1 px-2">
+                            <i class="bi bi-gear me-1"></i>System
+                        </h6>
+                        <a class="nav-link sidebar-link text-light-50 py-1 px-3"
+                           href="/settings" data-path="/settings">
+                            <i class="bi bi-gear-wide-connected me-2"></i>Settings
+                        </a>
+                        <a class="nav-link sidebar-link text-light-50 py-1 px-3"
+                           href="/mapping" data-path="/mapping">
+                            <i class="bi bi-sliders me-2"></i>Source Mapping
+                        </a>
+                    </li>
+
                 </ul>
             </nav>
         </div>
     </div>
+
+    <!-- Sidebar active-state + accordion persistence script -->
+    <script>
+    (function () {
+        const path = window.location.pathname;
+        // Determine active location from current path
+        function getActiveLocation() {
+            const m = path.match(/^\/location\/([^/]+)/);
+            if (m) return m[1];
+            // Also check source→location mapping for legacy /source/* pages
+            const sourceMap = {
+                'bankofamerica': 'gg', 'gg': 'gg',
+                'chase': 'ar',          'ar': 'ar'
+            };
+            const s = path.match(/^\/source\/([^/]+)/);
+            return s ? (sourceMap[s[1]] || null) : null;
+        }
+
+        const activeLoc = getActiveLocation();
+
+        // Expand the active location's accordion on load
+        if (activeLoc) {
+            const el = document.getElementById('loc-' + activeLoc);
+            if (el) {
+                el.classList.add('show');
+                const btn = document.querySelector('[data-bs-target="#loc-' + activeLoc + '"]');
+                if (btn) btn.setAttribute('aria-expanded', 'true');
+            }
+        } else {
+            // Restore last-open location from localStorage
+            const saved = localStorage.getItem('sidebar_location');
+            if (saved) {
+                const el = document.getElementById('loc-' + saved);
+                if (el) {
+                    el.classList.add('show');
+                    const btn = document.querySelector('[data-bs-target="#loc-' + saved + '"]');
+                    if (btn) btn.setAttribute('aria-expanded', 'true');
+                }
+            }
+        }
+
+        // Persist location choice when user manually opens an accordion
+        document.querySelectorAll('.location-toggle').forEach(btn => {
+            btn.addEventListener('click', function () {
+                localStorage.setItem('sidebar_location', this.dataset.location);
+            });
+        });
+
+        // Highlight the active link
+        document.querySelectorAll('.sidebar-link').forEach(a => {
+            const linkPath = a.getAttribute('data-path');
+            if (linkPath && (path === linkPath || path.startsWith(linkPath + '/'))) {
+                a.classList.add('active', 'text-white', 'fw-semibold');
+                a.classList.remove('text-light-50');
+            }
+        });
+    })();
+    </script>
 
     <!-- Loading Overlay -->
     <div id="loading-overlay" class="loading-overlay" style="display: none;">

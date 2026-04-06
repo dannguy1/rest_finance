@@ -12,6 +12,15 @@
                     <i class="bi bi-{{ source_icon }} fs-1 text-primary"></i>
                 </div>
                 <div>
+                    {% if location_id is defined and location_id %}
+                    <div class="mb-1">
+                        <a href="/location/{{ location_id }}/bank"
+                           class="badge text-decoration-none me-1"
+                           style="background:{% if location_id == 'gg' %}#0d6efd{% else %}#198754{% endif %}">
+                            <i class="bi bi-geo-alt-fill me-1"></i>{{ location_name }}
+                        </a>
+                    </div>
+                    {% endif %}
                     <h1 class="h3 mb-1">{{ source_name }}</h1>
                     <p class="text-muted mb-0">{{ source_description }}</p>
                 </div>

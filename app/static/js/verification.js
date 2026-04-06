@@ -43,6 +43,15 @@ const Verification = (() => {
             opt.textContent = c.display_name;
             sel.appendChild(opt);
         });
+
+        // Auto-select location if pre-set by server (location-centric URL)
+        const preselect = window._preselect_location;
+        if (preselect) {
+            sel.value = preselect;
+            if (sel.value === preselect) {
+                _onLocationChange();
+            }
+        }
     }
 
     // ------------------------------------------------------------------
