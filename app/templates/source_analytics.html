@@ -310,7 +310,9 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block modals %}
 <!-- Description Detail Modal -->
 <div class="modal fade" id="descriptionDetailModal" tabindex="-1" aria-labelledby="descriptionDetailModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -397,4 +399,4 @@
     };
 </script>
 <script src="/static/js/source_analytics.js?v={{ range(1, 1000) | random }}"></script>
-{% endblock %} 
+{% endblock %}
