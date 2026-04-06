@@ -8,6 +8,7 @@ class SourceAnalyticsApp {
 
     init() {
         this.setupEventListeners();
+        this.setupDetailModal();
         this.checkForSelectedFile();
     }
 
@@ -112,7 +113,9 @@ class SourceAnalyticsApp {
         if (results && tbody) {
             results.style.display = 'block';
             
-            tbody.innerHTML = data.groups.map(group => `
+            tbody.innerHTML = data.groups.map(group => {
+                const descEsc = group.description.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                return `
                 <tr>
                     <td>${group.description}</td>
                     <td>${group.count}</td>
@@ -120,8 +123,23 @@ class SourceAnalyticsApp {
                     <td>$${group.average_amount.toFixed(2)}</td>
                     <td>$${group.min_amount.toFixed(2)}</td>
                     <td>$${group.max_amount.toFixed(2)}</td>
-                </tr>
-            `).join('');
+                    <td class="text-center">
+                        <button class="btn btn-outline-primary btn-sm py-0 px-1 detail-btn"
+                                title="View ${descEsc} transactions"
+                                data-description="${descEsc}">
+                            <i class="bi bi-eye"></i>
+                            <span class="ms-1">${group.count}</span>
+                        </button>
+                    </td>
+                </tr>`;
+            }).join('');
+
+            // Attach click handlers to detail buttons
+            tbody.querySelectorAll('.detail-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    this.showDescriptionDetail(btn.dataset.description);
+                });
+            });
         }
     }
 
@@ -549,10 +567,109 @@ class SourceAnalyticsApp {
         });
     }
 
+    setupDetailModal() {
+        const exportBtn = document.getElementById('detail-modal-export');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => this.exportDetailData());
+        }
+    }
+
+    async showDescriptionDetail(description) {
+        if (!this.currentFile) return;
+
+        // Reset modal state
+        const loading   = document.getElementById('detail-modal-loading');
+        const summary   = document.getElementById('detail-modal-summary');
+        const tableWrap = document.getElementById('detail-modal-table-wrapper');
+        const errorDiv  = document.getElementById('detail-modal-error');
+        const descLabel = document.getElementById('detail-modal-desc-label');
+        const modalTitle = document.getElementById('descriptionDetailModalLabel');
+
+        loading.style.display   = 'block';
+        summary.style.display   = 'none';
+        tableWrap.style.display = 'none';
+        errorDiv.style.display  = 'none';
+
+        if (descLabel) descLabel.textContent = description;
+        if (modalTitle) modalTitle.innerHTML = `<i class="bi bi-list-ul me-2"></i>${description}`;
+
+        // Show modal
+        const modalEl = document.getElementById('descriptionDetailModal');
+        const modal   = bootstrap.Modal.getOrCreate(modalEl);
+        modal.show();
+
+        try {
+            const url = `/api/files/analytics/${this.config.source}/group-by-description/detail`
+                + `?description=${encodeURIComponent(description)}`
+                + `&fileType=${this.currentFile.type}`
+                + `&filePath=${encodeURIComponent(this.currentFile.path)}`;
+
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Server error: ${response.status}`);
+            const data = await response.json();
+
+            // Store for export
+            this._detailData = data;
+
+            // Populate summary
+            document.getElementById('detail-summary-count').textContent = data.count;
+            document.getElementById('detail-summary-total').textContent = `$${data.total_amount.toFixed(2)}`;
+            const avg = data.count > 0 ? (data.total_amount / data.count) : 0;
+            document.getElementById('detail-summary-avg').textContent   = `$${avg.toFixed(2)}`;
+
+            // Populate table
+            const tbody = document.getElementById('detail-modal-tbody');
+            const hasAccount     = data.records.some(r => r.account !== undefined);
+            const hasSimpleDesc  = data.records.some(r => r.simple_description !== undefined);
+
+            document.getElementById('detail-col-account').style.display   = hasAccount    ? '' : 'none';
+            document.getElementById('detail-col-simpledesc').style.display = hasSimpleDesc ? '' : 'none';
+
+            tbody.innerHTML = data.records.map(r => {
+                const amtClass = r.amount < 0 ? 'text-danger' : 'text-success';
+                const amtSign  = r.amount < 0 ? '-' : '';
+                let row = `<tr>
+                    <td class="text-nowrap">${r.date || '—'}</td>
+                    <td>${r.description}</td>
+                    <td class="text-end ${amtClass}">${amtSign}$${Math.abs(r.amount).toFixed(2)}</td>`;
+                if (hasAccount)    row += `<td>${r.account || ''}</td>`;
+                if (hasSimpleDesc) row += `<td>${r.simple_description || ''}</td>`;
+                row += `</tr>`;
+                return row;
+            }).join('');
+
+            loading.style.display   = 'none';
+            summary.style.display   = 'block';
+            tableWrap.style.display = 'block';
+
+        } catch (err) {
+            loading.style.display  = 'none';
+            errorDiv.style.display = 'block';
+            errorDiv.textContent   = 'Failed to load transactions: ' + err.message;
+        }
+    }
+
+    exportDetailData() {
+        if (!this._detailData) return;
+        const d = this._detailData;
+        const rows = [['Date', 'Description', 'Amount']];
+        d.records.forEach(r => rows.push([r.date, r.description, r.amount.toFixed(2)]));
+        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `${this.config.sourceName}_${d.description.replace(/[^a-z0-9]/gi, '_')}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
     exportDescriptionData() {
         if (!this.currentFile) return;
 
-        // Create CSV content
+        // Create CSV content (skip the last Details column)
         const tbody = document.getElementById('description-group-body');
         if (!tbody) return;
 
@@ -560,8 +677,8 @@ class SourceAnalyticsApp {
         let csv = 'Description,Count,Total Amount,Average Amount,Min Amount,Max Amount\n';
         
         rows.forEach(row => {
-            const cells = row.querySelectorAll('td');
-            const rowData = Array.from(cells).map(cell => cell.textContent.replace(',', ';'));
+            const cells = Array.from(row.querySelectorAll('td')).slice(0, 6); // exclude Details column
+            const rowData = cells.map(cell => `"${cell.textContent.trim().replace(/"/g, '""')}"`);
             csv += rowData.join(',') + '\n';
         });
 

@@ -115,6 +115,57 @@ async def analytics_group_by_description(
     }
 
 
+@router.get("/{source}/group-by-description/detail")
+@limiter.limit(settings.rate_limit_api)
+@handle_service_errors
+async def analytics_group_by_description_detail(
+    source: str,
+    request: Request,
+    description: str = Query(..., description="Description to get details for"),
+    fileType: str = Query(..., description="Type of file (processed or uploaded)"),
+    filePath: str = Query(..., description="Path to the file")
+):
+    """Return all individual transactions for a specific description, sorted by date."""
+    source_config = get_source_config(source)
+    source_enum = source_config["name"]
+
+    df = await load_file_data(source_enum, fileType, filePath)
+
+    # Filter rows matching the description
+    mask = df['Description'] == description
+    detail_df = df[mask].copy()
+
+    # Sort by date column
+    date_col = get_date_column(source_enum)
+    if date_col in detail_df.columns:
+        detail_df[date_col] = pd.to_datetime(detail_df[date_col], errors='coerce')
+        detail_df = detail_df.sort_values(date_col)
+        detail_df[date_col] = detail_df[date_col].dt.strftime('%Y-%m-%d')
+
+    # Build rows — include Date, Description, Amount, and any extra columns present
+    col_date = date_col if date_col in detail_df.columns else None
+    records = []
+    for _, row in detail_df.iterrows():
+        entry = {
+            'date': str(row[col_date]) if col_date else '',
+            'description': str(row['Description']),
+            'amount': float(row['Amount']),
+        }
+        # Include optional extra columns if available
+        for extra in ('Account', 'Simple Description', 'Source File'):
+            if extra in detail_df.columns:
+                entry[extra.lower().replace(' ', '_')] = str(row[extra])
+        records.append(entry)
+
+    return {
+        "source": source_enum,
+        "description": description,
+        "count": len(records),
+        "total_amount": round(float(detail_df['Amount'].sum()), 2) if len(records) else 0.0,
+        "records": records
+    }
+
+
 @router.get("/{source}/monthly-summary")
 @limiter.limit(settings.rate_limit_api)
 @handle_service_errors
