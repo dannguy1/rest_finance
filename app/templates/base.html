@@ -40,11 +40,26 @@
                     <i class="bi bi-list"></i>
                 </button>
                 
-                <a class="navbar-brand" href="/">
+                <a class="navbar-brand me-4" href="/">
                     <i class="bi bi-shop me-2"></i>
                     Garlic and Chives
                 </a>
-                
+
+                <!-- Location selector pills -->
+                <div class="d-flex align-items-center gap-2" id="location-picker">
+                    <span class="text-light-50 small me-1">
+                        <i class="bi bi-geo-alt me-1"></i>Location:
+                    </span>
+                    <button class="btn btn-sm location-pill" id="pill-gg"
+                            data-location="gg" data-name="GG">
+                        <i class="bi bi-circle-fill me-1" style="font-size:0.55rem"></i>GG
+                    </button>
+                    <button class="btn btn-sm location-pill" id="pill-ar"
+                            data-location="ar" data-name="AR">
+                        <i class="bi bi-circle-fill me-1" style="font-size:0.55rem"></i>AR
+                    </button>
+                </div>
+
                 <div class="navbar-nav ms-auto">
                     <div class="nav-item dropdown">
                         <button class="btn btn-dark dropdown-toggle" type="button" id="notificationsDropdown" data-bs-toggle="dropdown">
@@ -89,94 +104,50 @@
 
                     <li class="nav-item"><hr class="border-secondary my-2"></li>
 
-                    <!-- ── GG Location ─────────────────────────────────── -->
-                    <li class="nav-item">
-                        <button class="btn btn-sm w-100 text-start text-light d-flex align-items-center px-2 py-2 location-toggle"
-                                data-bs-toggle="collapse" data-bs-target="#loc-gg"
-                                aria-expanded="false" aria-controls="loc-gg"
-                                data-location="gg">
-                            <span class="location-dot me-2" style="width:10px;height:10px;border-radius:50%;background:#0d6efd;display:inline-block;flex-shrink:0"></span>
-                            <span class="fw-semibold flex-grow-1">GG · Garlic &amp; Chives 2</span>
-                            <i class="bi bi-chevron-down loc-chevron small"></i>
-                        </button>
-                        <div class="collapse" id="loc-gg">
-                            <ul class="nav flex-column ps-3 mt-1 mb-1">
-                                <li class="nav-item">
-                                    <a class="nav-link sidebar-link text-light-50 py-1"
-                                       href="/location/gg/bank"
-                                       data-path="/location/gg/bank" data-location="gg">
-                                        <i class="bi bi-bank me-2"></i>Bank Statement
-                                        <small class="ms-1 text-muted">(BofA)</small>
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link sidebar-link text-light-50 py-1"
-                                       href="/location/gg/merchant"
-                                       data-path="/location/gg/merchant" data-location="gg">
-                                        <i class="bi bi-credit-card me-2"></i>Merchant Statement
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link sidebar-link text-light-50 py-1"
-                                       href="/location/gg/verify"
-                                       data-path="/location/gg/verify" data-location="gg">
-                                        <i class="bi bi-shield-check me-2"></i>Deposit Verification
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
+                    <!-- Location section header -->
+                    <li class="nav-item mb-1">
+                        <h6 class="text-light-50 text-uppercase small mb-2 px-1" id="sidebar-location-heading">
+                            <i class="bi bi-geo-alt-fill me-1"></i>
+                            <span id="sidebar-location-label">Location</span>
+                        </h6>
                     </li>
 
-                    <!-- ── AR Location ─────────────────────────────────── -->
-                    <li class="nav-item mt-1">
-                        <button class="btn btn-sm w-100 text-start text-light d-flex align-items-center px-2 py-2 location-toggle"
-                                data-bs-toggle="collapse" data-bs-target="#loc-ar"
-                                aria-expanded="false" aria-controls="loc-ar"
-                                data-location="ar">
-                            <span class="location-dot me-2" style="width:10px;height:10px;border-radius:50%;background:#198754;display:inline-block;flex-shrink:0"></span>
-                            <span class="fw-semibold flex-grow-1">AR · Garlic &amp; Chives</span>
-                            <i class="bi bi-chevron-down loc-chevron small"></i>
-                        </button>
-                        <div class="collapse" id="loc-ar">
-                            <ul class="nav flex-column ps-3 mt-1 mb-1">
-                                <li class="nav-item">
-                                    <a class="nav-link sidebar-link text-light-50 py-1"
-                                       href="/location/ar/bank"
-                                       data-path="/location/ar/bank" data-location="ar">
-                                        <i class="bi bi-bank me-2"></i>Bank Statement
-                                        <small class="ms-1 text-muted">(Chase)</small>
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link sidebar-link text-light-50 py-1"
-                                       href="/location/ar/merchant"
-                                       data-path="/location/ar/merchant" data-location="ar">
-                                        <i class="bi bi-credit-card me-2"></i>Merchant Statement
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link sidebar-link text-light-50 py-1"
-                                       href="/location/ar/verify"
-                                       data-path="/location/ar/verify" data-location="ar">
-                                        <i class="bi bi-shield-check me-2"></i>Deposit Verification
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
+                    <!-- Location-specific links (hrefs set by JS) -->
+                    <li class="nav-item">
+                        <a class="nav-link sidebar-link text-light-50 py-1"
+                           id="nav-bank" href="#" data-feature="bank">
+                            <i class="bi bi-bank me-2"></i>
+                            Bank Statement
+                            <small class="ms-1 text-muted" id="nav-bank-subtitle"></small>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link sidebar-link text-light-50 py-1"
+                           id="nav-merchant" href="#" data-feature="merchant">
+                            <i class="bi bi-credit-card me-2"></i>
+                            Merchant Statement
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link sidebar-link text-light-50 py-1"
+                           id="nav-verify" href="#" data-feature="verify">
+                            <i class="bi bi-shield-check me-2"></i>
+                            Deposit Verification
+                        </a>
                     </li>
 
                     <li class="nav-item"><hr class="border-secondary my-2"></li>
 
-                    <!-- ── Shared Vendors ──────────────────────────────── -->
+                    <!-- Shared Vendors -->
                     <li class="nav-item">
-                        <h6 class="text-light-50 text-uppercase small mb-1 px-2">
+                        <h6 class="text-light-50 text-uppercase small mb-1 px-1">
                             <i class="bi bi-truck me-1"></i>Vendors
                         </h6>
-                        <a class="nav-link sidebar-link text-light-50 py-1 px-3"
+                        <a class="nav-link sidebar-link text-light-50 py-1 ps-3"
                            href="/source/sysco" data-path="/source/sysco">
                             <i class="bi bi-truck me-2"></i>Sysco
                         </a>
-                        <a class="nav-link sidebar-link text-light-50 py-1 px-3"
+                        <a class="nav-link sidebar-link text-light-50 py-1 ps-3"
                            href="/source/restaurantdepot" data-path="/source/restaurantdepot">
                             <i class="bi bi-shop me-2"></i>Restaurant Depot
                         </a>
@@ -184,16 +155,16 @@
 
                     <li class="nav-item"><hr class="border-secondary my-2"></li>
 
-                    <!-- ── System ──────────────────────────────────────── -->
+                    <!-- System -->
                     <li class="nav-item">
-                        <h6 class="text-light-50 text-uppercase small mb-1 px-2">
+                        <h6 class="text-light-50 text-uppercase small mb-1 px-1">
                             <i class="bi bi-gear me-1"></i>System
                         </h6>
-                        <a class="nav-link sidebar-link text-light-50 py-1 px-3"
+                        <a class="nav-link sidebar-link text-light-50 py-1 ps-3"
                            href="/settings" data-path="/settings">
                             <i class="bi bi-gear-wide-connected me-2"></i>Settings
                         </a>
-                        <a class="nav-link sidebar-link text-light-50 py-1 px-3"
+                        <a class="nav-link sidebar-link text-light-50 py-1 ps-3"
                            href="/mapping" data-path="/mapping">
                             <i class="bi bi-sliders me-2"></i>Source Mapping
                         </a>
@@ -204,61 +175,132 @@
         </div>
     </div>
 
-    <!-- Sidebar active-state + accordion persistence script -->
+    <!-- Location management + sidebar active-state script -->
     <script>
     (function () {
+        // ── Location config (mirrors location_config.py) ─────────────
+        const LOCATIONS = {
+            gg: {
+                name: 'GG · Garlic & Chives 2',
+                shortName: 'GG',
+                color: '#0d6efd',
+                bankLabel: 'BofA',
+                sources: { bank: 'bankofamerica', merchant: 'gg' }
+            },
+            ar: {
+                name: 'AR · Garlic & Chives',
+                shortName: 'AR',
+                color: '#198754',
+                bankLabel: 'Chase',
+                sources: { bank: 'chase', merchant: 'ar' }
+            }
+        };
+
+        // ── Determine active location ─────────────────────────────────
         const path = window.location.pathname;
-        // Determine active location from current path
-        function getActiveLocation() {
+
+        function detectLocationFromPath() {
             const m = path.match(/^\/location\/([^/]+)/);
-            if (m) return m[1];
-            // Also check source→location mapping for legacy /source/* pages
+            if (m && LOCATIONS[m[1]]) return m[1];
             const sourceMap = {
-                'bankofamerica': 'gg', 'gg': 'gg',
-                'chase': 'ar',          'ar': 'ar'
+                bankofamerica: 'gg', gg: 'gg',
+                chase: 'ar',         ar: 'ar'
             };
             const s = path.match(/^\/source\/([^/]+)/);
             return s ? (sourceMap[s[1]] || null) : null;
         }
 
-        const activeLoc = getActiveLocation();
-
-        // Expand the active location's accordion on load
-        if (activeLoc) {
-            const el = document.getElementById('loc-' + activeLoc);
-            if (el) {
-                el.classList.add('show');
-                const btn = document.querySelector('[data-bs-target="#loc-' + activeLoc + '"]');
-                if (btn) btn.setAttribute('aria-expanded', 'true');
-            }
-        } else {
-            // Restore last-open location from localStorage
-            const saved = localStorage.getItem('sidebar_location');
-            if (saved) {
-                const el = document.getElementById('loc-' + saved);
-                if (el) {
-                    el.classList.add('show');
-                    const btn = document.querySelector('[data-bs-target="#loc-' + saved + '"]');
-                    if (btn) btn.setAttribute('aria-expanded', 'true');
-                }
-            }
+        function getActiveLocation() {
+            return detectLocationFromPath()
+                || localStorage.getItem('active_location')
+                || 'gg';
         }
 
-        // Persist location choice when user manually opens an accordion
-        document.querySelectorAll('.location-toggle').forEach(btn => {
+        function setActiveLocation(locId) {
+            localStorage.setItem('active_location', locId);
+            applyLocation(locId);
+        }
+
+        // ── Apply location to pills + sidebar ─────────────────────────
+        function applyLocation(locId) {
+            const loc = LOCATIONS[locId];
+            if (!loc) return;
+
+            // Navbar pills
+            document.querySelectorAll('.location-pill').forEach(btn => {
+                const active = btn.dataset.location === locId;
+                btn.className = 'btn btn-sm location-pill';
+                if (active) {
+                    btn.style.background = loc.color;
+                    btn.style.color = '#fff';
+                    btn.style.borderColor = loc.color;
+                } else {
+                    btn.style.background = '';
+                    btn.style.color = '#adb5bd';
+                    btn.style.borderColor = '#6c757d';
+                }
+            });
+
+            // Sidebar heading
+            const heading = document.getElementById('sidebar-location-label');
+            if (heading) {
+                heading.textContent = loc.name;
+                heading.parentElement.style.color = loc.color;
+            }
+
+            // Sidebar location links
+            const features = {
+                bank:     { id: 'nav-bank',     subtitle: '(' + loc.bankLabel + ')' },
+                merchant: { id: 'nav-merchant',  subtitle: '' },
+                verify:   { id: 'nav-verify',    subtitle: '' }
+            };
+            Object.entries(features).forEach(([feat, cfg]) => {
+                const a = document.getElementById(cfg.id);
+                if (!a) return;
+                a.href = '/location/' + locId + '/' + feat;
+                a.dataset.path = '/location/' + locId + '/' + feat;
+                const sub = document.getElementById('nav-bank-subtitle');
+                if (feat === 'bank' && sub) sub.textContent = cfg.subtitle;
+            });
+
+            // Active link highlight
+            document.querySelectorAll('.sidebar-link').forEach(a => {
+                const lp = a.getAttribute('data-path') || a.getAttribute('href');
+                const isActive = lp && (path === lp || (lp !== '/' && path.startsWith(lp)));
+                a.classList.toggle('active', isActive);
+                a.classList.toggle('text-white', isActive);
+                a.classList.toggle('fw-semibold', isActive);
+                if (isActive) a.classList.remove('text-light-50');
+                else if (!a.classList.contains('text-light')) a.classList.add('text-light-50');
+            });
+        }
+
+        // ── Location pill click ───────────────────────────────────────
+        document.querySelectorAll('.location-pill').forEach(btn => {
             btn.addEventListener('click', function () {
-                localStorage.setItem('sidebar_location', this.dataset.location);
+                const newLoc = this.dataset.location;
+                const currentLoc = getActiveLocation();
+                setActiveLocation(newLoc);
+
+                // If on a location-specific page, switch to same feature for new location
+                const featMatch = path.match(/^\/location\/[^/]+\/(.+)$/);
+                if (featMatch) {
+                    window.location.href = '/location/' + newLoc + '/' + featMatch[1];
+                } else if (newLoc !== currentLoc && detectLocationFromPath()) {
+                    // On a legacy /source/* that belonged to old location — go to new bank page
+                    window.location.href = '/location/' + newLoc + '/bank';
+                }
+                // Otherwise just update UI in place (e.g. on dashboard)
             });
         });
 
-        // Highlight the active link
-        document.querySelectorAll('.sidebar-link').forEach(a => {
-            const linkPath = a.getAttribute('data-path');
-            if (linkPath && (path === linkPath || path.startsWith(linkPath + '/'))) {
-                a.classList.add('active', 'text-white', 'fw-semibold');
-                a.classList.remove('text-light-50');
-            }
-        });
+        // ── Init ──────────────────────────────────────────────────────
+        const activeLoc = getActiveLocation();
+        // Persist if detected from URL
+        if (detectLocationFromPath()) {
+            localStorage.setItem('active_location', detectLocationFromPath());
+        }
+        applyLocation(activeLoc);
     })();
     </script>
 
