@@ -11,6 +11,7 @@ A full-stack web application for processing and validating financial data from m
 - **Developer Reference**: [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Error handling & best practices
 - **API Reference**: [docs/api_reference.md](docs/api_reference.md) - Full endpoint listing
 - **Architecture**: [docs/overview.md](docs/overview.md) - System design
+- **Bank Analytics & Patterns**: [docs/bank_analytics.md](docs/bank_analytics.md) - Adding merchant/payroll/custom patterns
 
 ### Implemented Features
 - ✅ Multi-source CSV processing (6 sources: BoA, Chase, Restaurant Depot, Sysco, GG, AR)
@@ -18,6 +19,11 @@ A full-stack web application for processing and validating financial data from m
 - ✅ Intelligent column mapping with JSON config per source
 - ✅ Multi-level validation (structural, format, data quality, metadata-driven)
 - ✅ Year/month-based output organization
+- ✅ Bank statement analytics — Group by Description, Monthly Summary, Amount Analysis, Trends
+- ✅ **Merchant Analysis** — pattern-based card-deposit extraction per bank source
+- ✅ **Payroll Analysis** — pattern-based payroll transfer extraction per bank source
+- ✅ **Deposit Verification** — match merchant batch totals against bank deposits with discrepancy reporting
+- ✅ Location-centric UI — GG and AR contexts selectable via navbar dropdown
 - ✅ Prometheus metrics (15+ counters/histograms/gauges)
 - ✅ Grafana dashboard configs
 - ✅ Enhanced JSON logging with correlation IDs

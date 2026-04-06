@@ -77,11 +77,19 @@ All analytics endpoints require query parameters:
 - `fileType`: `uploaded` or `processed`
 - `filePath`: path relative to source input/output
 
-Endpoints:
+### General analytics
 - `GET /api/files/analytics/{source}/group-by-description`
 - `GET /api/files/analytics/{source}/monthly-summary`
 - `GET /api/files/analytics/{source}/amount-analysis`
 - `GET /api/files/analytics/{source}/trends`
+
+### Pattern-based analytics (bank sources only)
+- `GET /api/files/analytics/{source}/merchant-analysis` — card-processing deposits and charges
+- `GET /api/files/analytics/{source}/payroll-analysis` — payroll transfer transactions
+
+Pattern-based endpoints return HTTP 422 when the source has no pattern configured (the UI shows "Not Available"). Patterns are configured in `SOURCE_CONFIGS` in `app/api/routes/analytics_routes.py`.
+
+See [`docs/bank_analytics.md`](bank_analytics.md) for the full guide including how to add new patterns and new analysis categories.
 
 ## Health (`/api/health`)
 
