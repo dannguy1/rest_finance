@@ -487,7 +487,7 @@ class SourceApp {
         console.log('processAllFiles called');
         try {
             const currentYear = new Date().getFullYear();
-            const response = await fetch(`/api/processing/process/${this.config.source}/${currentYear}`, {
+            const response = await fetch(`/api/processing/process/${this.config.source}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -523,7 +523,7 @@ class SourceApp {
     async processFile(filename) {
         console.log('processFile called with:', filename);
         try {
-            const response = await fetch(`/api/files/process/${this.config.source}/${encodeURIComponent(filename)}`, {
+            const response = await fetch(`/api/processing/process-file/${this.config.source}/${encodeURIComponent(filename)}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
