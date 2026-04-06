@@ -493,54 +493,7 @@ class DataProcessor:
                 processing_logger.log_system_event(
                     f"PDF extraction successful: {filename} -> {csv_path.name}", level="info"
                 )
-                
-                # For GG merchant PDFs, just rename and move the extracted CSV as-is
-                if source == "gg":
-                    import pandas as pd
-                    import shutil
-                    
-                    # Read the CSV to get the date from first row
-                    df = pd.read_csv(csv_path)
-                    if len(df) == 0:
-                        return ProcessingResult(
-                            success=False,
-                            files_processed=0,
-                            output_files=[],
-                            processing_time=(datetime.now() - start_time).total_seconds(),
-                            error_message=f"Extracted CSV is empty: {csv_path.name}"
-                        )
-                    
-                    # Get year and month from FULL_DATE column
-                    first_date = pd.to_datetime(df['FULL_DATE'].iloc[0])
-                    year = first_date.year
-                    month = first_date.month
-                    
-                    # Create output directory
-                    output_dir = self.data_dir / source / "output" / str(year)
-                    FileUtils.ensure_directory(output_dir)
-                    
-                    # Copy the file with the new name: MM_YYYY.csv
-                    output_file = output_dir / f"{month:02d}_{year}.csv"
-                    shutil.copy2(csv_path, output_file)
-                    
-                    processing_logger.log_file_operation(
-                        "copy", output_file.name, source, True, 
-                        f"Copied extracted CSV as-is from {csv_path.name}"
-                    )
-                    
-                    processing_time = (datetime.now() - start_time).total_seconds()
-                    processing_logger.log_processing_job(
-                        "system", source, "completed", 100.0, 
-                        f"Processing completed for {source} file {filename}"
-                    )
-                    
-                    return ProcessingResult(
-                        success=True,
-                        files_processed=1,
-                        output_files=[str(output_file)],
-                        processing_time=processing_time
-                    )
-            
+
             # 3. Parse the CSV file (original or extracted)
             parsed_data = await self._parse_single_file(csv_path, source)
             processing_logger.log_system_event(

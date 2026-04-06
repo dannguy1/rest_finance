@@ -308,8 +308,8 @@ class PDFService:
             Path to generated CSV or None
         """
         try:
-            # For GG merchant statements, use the specialized extraction script
-            if source.lower() == 'gg':
+            # GG and AR share the same PDF format — use the specialized extraction script
+            if source.lower() in ('gg', 'ar'):
                 return self._process_gg_merchant_statement(pdf_path)
             
             # For other vendors, use the existing vendor configuration method
